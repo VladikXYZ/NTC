@@ -36,6 +36,7 @@ def upsample(img, scale):
     return indices, samples
 
 def reconstruct_image(model, device, height, width, z = 1, bench = False, halved = False):
+    model.eval()
     h, w = z*height, z*width
     y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
     test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)
