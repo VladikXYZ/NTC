@@ -61,8 +61,8 @@ class ColorMLP(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(2, 128), nn.ReLU(),
-            nn.Linear(128, 32), nn.ReLU(),
-            nn.Linear(32, 3), nn.Sigmoid()
+            nn.Linear(128, 64), nn.ReLU(),
+            nn.Linear(64, 3), nn.Sigmoid()
         )
     def forward(self, x):
         return torch.clamp(self.net(x), 0, 1)
