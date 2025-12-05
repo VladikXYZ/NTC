@@ -10,7 +10,7 @@ import os
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using:", device)
 
-INPUT_IMAGE = "lama.jpg"
+INPUT_IMAGE = "oa.png"
 
 # --- KONFIGURACE ---
 CONFIG = {
@@ -115,7 +115,7 @@ class NeuralDetailMapper(nn.Module):
 model = NeuralDetailMapper(CONFIG).to(device)
 optimizer = optim.Adam(model.parameters(), lr=CONFIG['lr'])
 loss_fn = nn.MSELoss()
-scaler = torch.cuda.amp.GradScaler()
+scaler = torch.GradScaler('cuda')
 
 # --- TRAIN ---
 print(f"Training with {CONFIG['octaves']} octaves...")
@@ -127,7 +127,7 @@ pbar = tqdm(total=patience, desc="Learning Texture")
 
 while True:
     optimizer.zero_grad()
-    with torch.cuda.amp.autocast():
+    with torch.autocast('cuda'):
         out = model()
         loss = loss_fn(out, target)
 
