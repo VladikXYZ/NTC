@@ -1,0 +1,42 @@
+/home/vladikxyz/Downloads/git/NNfr/.venv/bin/python /home/vladikxyz/Downloads/git/NNfr/vladik.py
+Using device: cuda
+Epoch 0, Loss: 0.174194, Epoch time: 0.66s
+Epoch 1, Loss: 0.182617, Epoch time: 0.48s
+Epoch 2, Loss: 0.178467, Epoch time: 0.50s
+Epoch 3, Loss: 0.176880, Epoch time: 0.34s
+Epoch 4, Loss: 0.184082, Epoch time: 0.48s
+Epoch 5, Loss: 0.177002, Epoch time: 0.57s
+Epoch 6, Loss: 0.173584, Epoch time: 0.48s
+Epoch 7, Loss: 0.181274, Epoch time: 0.50s
+Epoch 8, Loss: 0.176880, Epoch time: 0.43s
+Epoch 9, Loss: 0.179443, Epoch time: 0.50s
+Epoch 10, Loss: 0.175293, Epoch time: 0.43s
+Epoch 11, Loss: 0.178589, Epoch time: 0.48s
+Epoch 12, Loss: 0.180054, Epoch time: 0.41s
+Epoch 13, Loss: 0.179688, Epoch time: 0.50s
+Epoch 14, Loss: 0.178955, Epoch time: 0.44s
+Epoch 15, Loss: 0.181641, Epoch time: 0.50s
+Epoch 16, Loss: 0.181641, Epoch time: 0.42s
+Epoch 17, Loss: 0.179688, Epoch time: 0.51s
+Epoch 18, Loss: 0.177246, Epoch time: 0.42s
+Epoch 19, Loss: 0.181396, Epoch time: 0.50s
+Training took: 9.54s
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                          ProfilerStep*         0.00%       0.000us         0.00%       0.000us       0.000us       1.496ms       738.60%       1.496ms     249.391us           0 B           0 B           0 B           0 B             6
+                                          ProfilerStep*        36.05%     776.168us        99.86%       2.150ms     358.281us       0.000us         0.00%     202.593us      33.766us           0 B           0 B           0 B      -8.94 MB             6
+                                           aten::linear         1.26%      27.029us        22.33%     480.804us      26.711us       0.000us         0.00%     128.192us       7.122us           0 B           0 B       4.54 MB           0 B            18
+                                            aten::addmm        11.62%     250.097us        17.55%     377.857us      20.992us     128.192us        63.28%     128.192us       7.122us           0 B           0 B       4.54 MB       4.54 MB            18
+                       ampere_fp16_sgemm_fp16_32x128_tn         0.00%       0.000us         0.00%       0.000us       0.000us      49.313us        24.34%      49.313us       8.219us           0 B           0 B           0 B           0 B             6
+void cutlass::Kernel2<cutlass_80_wmma_tensorop_f16_s...         0.00%       0.000us         0.00%       0.000us       0.000us      39.487us        19.49%      39.487us       6.581us           0 B           0 B           0 B           0 B             6
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      35.809us        17.68%      35.809us       1.989us           0 B           0 B           0 B           0 B            18
+void cutlass::Kernel2<cutlass_75_wmma_tensorop_f16_s...         0.00%       0.000us         0.00%       0.000us       0.000us      33.536us        16.55%      33.536us       5.589us           0 B           0 B           0 B           0 B             6
+                                             aten::relu         1.46%      31.350us         5.91%     127.130us      10.594us       0.000us         0.00%      28.608us       2.384us           0 B           0 B       4.50 MB           0 B            12
+                                        aten::clamp_min         2.54%      54.650us         4.38%      94.280us       7.857us      28.608us        14.12%      28.608us       2.384us           0 B           0 B       4.50 MB       4.50 MB            12
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 2.153ms
+Self CUDA time total: 202.593us
+
+✓ Reconstructed image with 1 zoom saved: reconstructed1.png
+✓ Reconstructed image with 32 zoom saved: reconstructed32.png

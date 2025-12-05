@@ -1,0 +1,45 @@
+/home/vladikxyz/Downloads/git/NNfr/.venv/bin/python /home/vladikxyz/Downloads/git/NNfr/vladik.py
+Using device: cuda
+Training started
+Epoch 0, Loss: 0.040841, Epoch time: 6.54s
+Epoch 1, Loss: 0.028567, Epoch time: 6.52s
+Epoch 2, Loss: 0.019797, Epoch time: 6.69s
+Epoch 3, Loss: 0.022506, Epoch time: 7.09s
+Epoch 4, Loss: 0.013638, Epoch time: 7.37s
+Epoch 5, Loss: 0.022682, Epoch time: 7.80s
+Epoch 6, Loss: 0.009233, Epoch time: 8.11s
+Epoch 7, Loss: 0.011732, Epoch time: 8.50s
+Epoch 8, Loss: 0.009568, Epoch time: 8.64s
+Epoch 9, Loss: 0.006395, Epoch time: 9.04s
+Epoch 10, Loss: 0.006391, Epoch time: 9.29s
+Epoch 11, Loss: 0.005153, Epoch time: 9.61s
+Epoch 12, Loss: 0.005281, Epoch time: 9.65s
+Epoch 13, Loss: 0.005943, Epoch time: 9.89s
+Epoch 14, Loss: 0.008481, Epoch time: 10.03s
+Epoch 15, Loss: 0.003933, Epoch time: 10.36s
+Epoch 16, Loss: 0.004008, Epoch time: 10.61s
+Epoch 17, Loss: 0.004389, Epoch time: 10.77s
+Epoch 18, Loss: 0.002952, Epoch time: 10.78s
+Epoch 19, Loss: 0.005187, Epoch time: 10.83s
+Training took: 178.12s
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                                          ProfilerStep*         0.00%       0.000us         0.00%       0.000us       0.000us       8.623ms       543.36%       8.623ms       1.437ms           0 B           0 B           0 B           0 B             6
+enumerate(DataLoader)#_SingleProcessDataLoaderIter._...         0.00%       0.000us         0.00%       0.000us       0.000us       1.325ms        83.46%       1.325ms     220.768us           0 B           0 B           0 B           0 B             6
+                                          ProfilerStep*         9.49%       4.905ms        94.60%      48.895ms       8.149ms       0.000us         0.00%       1.043ms     173.791us           0 B           0 B     -16.00 KB      -9.02 MB             6
+                               Optimizer.step#Adam.step         0.00%       0.000us         0.00%       0.000us       0.000us       1.003ms        63.20%       1.003ms     167.173us           0 B           0 B           0 B           0 B             6
+                               Optimizer.step#Adam.step         1.54%     795.930us         3.15%       1.628ms     271.369us       0.000us         0.00%     512.476us      85.413us           0 B         -24 B           0 B    -801.00 KB             6
+    autograd::engine::evaluate_function: AddmmBackward0         0.24%     123.787us         2.07%       1.069ms      59.409us       0.000us         0.00%     376.031us      20.891us           0 B           0 B     -45.00 KB      -4.94 MB            18
+                                           aten::linear         0.16%      84.700us         3.50%       1.808ms      50.215us       0.000us         0.00%     315.424us       8.762us           0 B           0 B       9.49 MB           0 B            36
+                                         AddmmBackward0         0.13%      66.040us         1.35%     695.281us      38.627us       0.000us         0.00%     264.543us      14.697us           0 B           0 B       4.89 MB           0 B            18
+                                               aten::mm         0.75%     386.164us         0.98%     508.561us      16.952us     264.543us        16.67%     264.543us       8.818us           0 B           0 B       4.89 MB       4.89 MB            30
+                                aten::_foreach_addcdiv_         0.08%      43.440us         0.13%      69.190us      11.532us     187.999us        11.85%     187.999us      31.333us           0 B           0 B           0 B           0 B             6
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+Self CPU time total: 51.683ms
+Self CUDA time total: 1.587ms
+
+✓ Reconstructed image with 1 zoom saved: reconstructed1.png
+✓ Reconstructed image with 32 zoom saved: reconstructed32.png
+
+Process finished with exit code 0

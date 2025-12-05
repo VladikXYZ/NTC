@@ -6,50 +6,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
-from scipy.ndimage import zoom
-from torch.profiler import profile, record_function, ProfilerActivity
+from torch import GradScaler, autocast
 from torch.utils.data import TensorDataset, DataLoader
-
+import sampling as smp
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
-
-
-def image_init(img: np.ndarray):
-    height, width = img.shape[:2]
-    x_corners = np.stack([np.arange(width+1)-1, np.arange(width+1)], axis=0)  # left, right
-    y_corners = np.stack([np.arange(height+1)-1, np.arange(height+1)], axis=0)  # top, bottom
-    x_corners[0,0] = 0
-    y_corners[0,0] = 0
-    x_corners[1,-1] = width-1
-    y_corners[1,-1] = height-1
-    corners = np.stack([
-        img[np.ix_(y_corners[0], x_corners[0])],  # top-left
-        img[np.ix_(y_corners[0], x_corners[1])],  # top-right
-        img[np.ix_(y_corners[1], x_corners[0])],  # bottom-left
-        img[np.ix_(y_corners[1], x_corners[1])]  # bottom-right
-    ], axis=0)
-    samples = np.mean(corners, axis=0)  # (H+1,W+1,3)
-    # plt.imshow(samples)
-    # plt.show()
-    y_coords, x_coords = np.meshgrid(np.linspace(0,1,height+1), np.linspace(0,1,width + 1))
-    indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)  # (N, 2)
-    return samples, indices
-
-def upsample(img, scale):
-    samples = zoom(img, (scale, scale, 1), order=1)  # order=1 = bilinear
-    h, w = samples.shape[:2]
-    y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
-    indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)  # (N, 2)
-    samples = samples.reshape(-1, 3)
-    return indices, samples
-
+from torch.profiler import profile, ProfilerActivity
 
 img = Image.open("aa.png").convert('RGB')
 img_array = np.array(img, dtype=np.float32) / 255.0
-og, test_indices = image_init(img_array)
+og, test_indices = smp.image_init(img_array)
 all_X, all_y = [], []
-for scale in [0.5, 1, 2, 4, 6]:
-    X, y = upsample(og, scale)
+for scale in [1, 2, 4, 6]:
+    X, y = smp.upsample(og, scale)
     all_X.append(X)
     all_y.append(y)
     # print(f"Scale {scale}: X={X.shape}, y={y.shape}")
@@ -60,78 +29,147 @@ class ColorMLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(2, 128), nn.ReLU(),
-            nn.Linear(128, 64), nn.ReLU(),
-            nn.Linear(64, 3), nn.Sigmoid()
+            nn.Linear(2, 256), nn.ReLU(),
+            nn.Linear(256, 128), nn.ReLU(),
+            nn.Linear(128, 3), nn.Sigmoid()
         )
     def forward(self, x):
         return torch.clamp(self.net(x), 0, 1)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# device = torch.device("cpu")
 print(f"Using device: {device}")
 
 
-model = ColorMLP().to(device)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)  # <- AFTER .to(device)
-
-# ✅ Tensors to GPU
-inputs_tensor = torch.from_numpy(X).float().to(device)
-targets_tensor = torch.from_numpy(y).float().to(device)
-dataset = TensorDataset(inputs_tensor, targets_tensor)
-loader = DataLoader(dataset, batch_size=256, shuffle=True, num_workers=0, pin_memory=False)
 
 
-from torch.amp import autocast, GradScaler
-scaler = GradScaler('cuda')
 
-print("Training started")
-start = time.time()
-for epoch in range(10):
-    model.train()
-    for batch_inputs, batch_targets in loader:
-        optimizer.zero_grad()
-        with autocast('cuda'):  # Mixed precision
-            preds = model(batch_inputs)
-            loss = criterion(preds, batch_targets)
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-    print(f'Epoch {epoch}, Loss: {loss.item():.8f}')
-print(f"Training took: {time.time() - start:.2f}s")
+full_prec = True
+on_gpu = True
+halved = False
+inputs_tensor = torch.from_numpy(X).float()
+targets_tensor = torch.from_numpy(y).float()
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                 schedule=torch.profiler.schedule(wait=1, warmup=1, active=6),
+                 record_shapes=True, profile_memory=True) as prof:
 
+    if on_gpu:
+        model = ColorMLP().to(device)
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.01)
+        inputs_tensor = inputs_tensor.to(device)
+        targets_tensor = targets_tensor.to(device)
+        dataset = TensorDataset(inputs_tensor, targets_tensor)
+        loader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0, pin_memory=False)
+
+        # model.train()
+        print("Training started")
+        start = time.time()
+
+
+        if full_prec:
+            for epoch in range(20):
+                epoch_start = time.time()
+                for batch_inputs, batch_targets in loader:
+                    prof.step()
+                    optimizer.zero_grad()
+                    preds = model(batch_inputs)
+                    loss = criterion(preds, batch_targets)
+                    optimizer.step()
+                print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+        else:
+            scaler = GradScaler('cuda')
+            for epoch in range(20):
+                epoch_start = time.time()
+                for batch_inputs, batch_targets in loader:
+                    prof.step()
+                    optimizer.zero_grad(set_to_none=True)  # Faster than zero_grad()
+                    with autocast('cuda'):
+                        preds = model(batch_inputs)
+                        loss = criterion(preds, batch_targets)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+
+        print(f"Training took: {time.time() - start:.2f}s")
+    else:
+        dataset = TensorDataset(inputs_tensor, targets_tensor)
+        loader = DataLoader(dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True,
+                            persistent_workers=True)
+
+        if full_prec and not halved:
+            model = ColorMLP().to(device)
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.01)
+            scaler = GradScaler('cuda')
+            start = time.time()
+            for epoch in range(20):
+                epoch_start = time.time()
+                for batch_inputs, batch_targets in loader:
+                    prof.step()
+                    batch_inputs = batch_inputs.to(device, non_blocking=True)
+                    batch_targets = batch_targets.to(device, non_blocking=True)
+                    optimizer.zero_grad(set_to_none=True)
+                    preds = model(batch_inputs)
+                    loss = criterion(preds, batch_targets)
+                    # optimizer.step()
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+
+        elif halved:
+            dataset = TensorDataset(inputs_tensor.half(), targets_tensor.half())
+            loader = DataLoader(dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True,
+                                persistent_workers=True)
+            model = ColorMLP().to(device).half()
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.01)
+            scaler = GradScaler(init_scale=65536)
+            start = time.time()
+            for epoch in range(20):
+                epoch_start = time.time()
+                for batch_inputs, batch_targets in loader:
+                    prof.step()
+                    batch_inputs = batch_inputs.to(device, non_blocking=True)
+                    batch_targets = batch_targets.to(device, non_blocking=True)
+                    optimizer.zero_grad(set_to_none=True)
+                    preds = model(batch_inputs)
+                    loss = criterion(preds, batch_targets)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    # optimizer.step()
+                print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+        else:
+            model = ColorMLP().to(device)
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.01)
+            scaler = GradScaler('cuda')
+            start = time.time()
+            for epoch in range(20):
+                epoch_start = time.time()
+                for batch_inputs, batch_targets in loader:
+                    prof.step()
+                    batch_inputs = batch_inputs.to(device, non_blocking=True)
+                    batch_targets = batch_targets.to(device, non_blocking=True)
+                    optimizer.zero_grad(set_to_none=True)
+                    with autocast('cuda'):
+                        preds = model(batch_inputs)
+                        loss = criterion(preds, batch_targets)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+        print(f"Training took: {time.time() - start:.2f}s")
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 h, w = og.shape[:2]
-with torch.no_grad():
-    vertex_uvs = torch.from_numpy(test_indices).float().to(device)
-    predicted_colors = model(vertex_uvs)
-    predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
-    predicted_colors = predicted_colors.astype(dtype=np.uint8)
-    og_np = og.cpu().numpy() if torch.is_tensor(og) else og
+og_np = og.cpu().numpy() if torch.is_tensor(og) else og
+smp.reconstruct_image(model, device, h, w, halved=halved)
+smp.reconstruct_image(model, device, h, w, 32, halved=halved)
 
-Image.fromarray(predicted_colors).save("reconstructed.png")
-print("✓ Reconstructed image saved: reconstructed.png")
-
-z = 1
-h, w = z*h, z*w
-y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
-test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)  # (N, 2)
-with torch.no_grad():
-    vertex_uvs = torch.from_numpy(test_indices).float().to(device)
-    activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
-    with profile(activities=activities, record_shapes=True) as prof:
-        with record_function("model_inference"):
-            predicted_colors = model(vertex_uvs)
-
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-
-
-    predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
-    predicted_colors = predicted_colors.astype(dtype=np.uint8)
-    og_np = og.cpu().numpy() if torch.is_tensor(og) else og
-
-Image.fromarray(predicted_colors).save(f"reconstructed{z}x.png")
-print(f"✓ Reconstructed image with {z} zoom saved: reconstructed{z}x.png")
+# Image.fromarray(predicted_colors).save(f"reconstructed{z}x.png")
+# print(f"✓ Reconstructed image with {z} zoom saved: reconstructed{z}x.png")
 # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 # axes[0].imshow(og_np); axes[0].set_title('Original'); axes[0].axis('off')
 # axes[1].imshow(predicted_colors); axes[1].set_title('MLP Output'); axes[1].axis('off')
