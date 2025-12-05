@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
 from scipy.ndimage import zoom
-from torch import meshgrid
+from torch.profiler import profile, record_function, ProfilerActivity
 from torch.utils.data import TensorDataset, DataLoader
 
 matplotlib.use('Qt5Agg')
@@ -88,7 +88,7 @@ scaler = GradScaler('cuda')
 
 print("Training started")
 start = time.time()
-for epoch in range(100):
+for epoch in range(10):
     model.train()
     for batch_inputs, batch_targets in loader:
         optimizer.zero_grad()
@@ -112,13 +112,20 @@ with torch.no_grad():
 Image.fromarray(predicted_colors).save("reconstructed.png")
 print("✓ Reconstructed image saved: reconstructed.png")
 
-z = 16
+z = 1
 h, w = z*h, z*w
 y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
 test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)  # (N, 2)
 with torch.no_grad():
     vertex_uvs = torch.from_numpy(test_indices).float().to(device)
-    predicted_colors = model(vertex_uvs)
+    activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+    with profile(activities=activities, record_shapes=True) as prof:
+        with record_function("model_inference"):
+            predicted_colors = model(vertex_uvs)
+
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+
+
     predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
     predicted_colors = predicted_colors.astype(dtype=np.uint8)
     og_np = og.cpu().numpy() if torch.is_tensor(og) else og
