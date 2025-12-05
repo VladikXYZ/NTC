@@ -16,9 +16,9 @@ class ColorMLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(2, 256), nn.ReLU(),
-            nn.Linear(256, 64), nn.ReLU(),
-            nn.Linear(64, 3)
+            nn.Linear(2, 128), nn.ReLU(),
+            nn.Linear(128, 32), nn.ReLU(),
+            nn.Linear(32, 3)
         )
     def forward(self, x):
         return torch.clamp(self.net(x), 0, 1)
@@ -26,7 +26,7 @@ class ColorMLP(nn.Module):
 
 
 
-X,y, test_indices, og = prep.pipeline("aa.png", [0.5, 1, 2, 3, 4, 8])
+X,y, test_indices, og = prep.pipeline("aa.png", [6])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device = torch.device("cpu")
 print(f"Using device: {device}")
@@ -34,13 +34,13 @@ print(f"Using device: {device}")
 
 model = ColorMLP().to(device)
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)  # <- AFTER .to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.01)  # <- AFTER .to(device)
 
 # ✅ Tensors to GPU
 inputs_tensor = torch.from_numpy(X).float().to(device)
 targets_tensor = torch.from_numpy(y).float().to(device)
 dataset = TensorDataset(inputs_tensor, targets_tensor)
-loader = DataLoader(dataset, batch_size=1024, shuffle=True, num_workers=0, pin_memory=False)
+loader = DataLoader(dataset, batch_size=256, shuffle=True, num_workers=0, pin_memory=False)
 
 
 from torch.amp import autocast, GradScaler
@@ -67,9 +67,6 @@ with torch.no_grad():
     predicted_colors = model(vertex_uvs)
     predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)
     og_np = og.cpu().numpy() if torch.is_tensor(og) else og
-    # print(f"UVS: {vertex_uvs.nbytes / 1e6:.2f} MB")
-    # print(f"Res: {predicted_colors.nbytes / 1e6:.2f} MB")
-    # print(f"OG: {og_np.nbytes / 1e6:.2f} MB")
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 axes[0].imshow(og_np); axes[0].set_title('Original'); axes[0].axis('off')
