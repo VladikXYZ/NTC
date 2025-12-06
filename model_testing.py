@@ -37,8 +37,8 @@ if __name__ == "__main__":
     loader = DataLoader(dataset, batch_size=max(256, 4096 * is_cuda), shuffle=True, num_workers=12 * is_cuda,
                         pin_memory=is_cuda)
 
-    # model = MLP.ColorMLP().to(device)
-    model = FMN.NeuralDetailMapper().to(device)
+    model = MLP.ColorMLP().to(device)
+    # model = FMN.NeuralDetailMapper().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
     # scaler = GradScaler(str(device))
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
     #                  schedule=torch.profiler.schedule(wait=1, warmup=1, active=6),
     #                  record_shapes=True, profile_memory=True) as prof:
-    for epoch in range(10):
+    for epoch in range(100):
         epoch_start = time.time()
         for batch_inputs, batch_targets in loader:
             # prof.step()
@@ -63,9 +63,10 @@ if __name__ == "__main__":
             # else:
             loss.backward()
             optimizer.step()
-        print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+        print(f'Epoch {epoch:03d}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
+    print(f"Training took {time.time()-start}s")
     # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
     h, w = og.shape[:2]
     file_name = img_path.stem
     prep.reconstruct_image(model, device, h, w, name=file_name)
-    prep.reconstruct_image(model, device, h, w, 32, bench=False, name=file_name)
+    prep.reconstruct_image(model, device, h, w, 2, bench=False, name=file_name)
