@@ -1,3 +1,5 @@
+import os
+
 import scipy as scp
 import numpy as np
 import torch
@@ -5,8 +7,11 @@ from PIL import Image
 from sympy import false
 from torch.profiler import profile, record_function, ProfilerActivity
 
+def load_image(path: os.PathLike): return np.array(Image.open("data/oa.png").convert("RGB"), dtype=np.float32) / 255.0
 
-def image_init(img: np.ndarray):
+
+def image_init(path: os.PathLike):
+    img = load_image(path)
     height, width = img.shape[:2]
     x_corners = np.stack([np.arange(width+1)-1, np.arange(width+1)], axis=0)  # left, right
     y_corners = np.stack([np.arange(height+1)-1, np.arange(height+1)], axis=0)  # top, bottom
@@ -41,8 +46,7 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, halved
     y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
     test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)
     with torch.no_grad():
-        if halved: vertex_uvs = torch.from_numpy(test_indices).half().to(device)
-        else: vertex_uvs = torch.from_numpy(test_indices).float().to(device)
+        vertex_uvs = torch.from_numpy(test_indices).float().to(device)
         if bench:
             activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
             with profile(activities=activities, record_shapes=True) as prof:
