@@ -52,6 +52,7 @@ if __name__ == "__main__":
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
     scaler = GradScaler('cuda')
+    print("Training starts")
     start = time.time()
     for epoch in range(100):
         epoch_start = time.time()

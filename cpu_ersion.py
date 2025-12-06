@@ -20,7 +20,7 @@ if __name__ == "__main__":
     og, test_indices = smp.image_init(img_array)
     og = img_array
     all_X, all_y = [], []
-    for scale in [1,2, 4]:
+    for scale in [0.5, 1, 2, 4, 6]:
         X, y = smp.upsample(og, scale)
         all_X.append(X)
         all_y.append(y)
@@ -36,7 +36,7 @@ if __name__ == "__main__":
                 nn.Linear(64, 3), nn.Sigmoid()
             )
         def forward(self, x):
-            return torch.clamp(self.net(x), 0, 1)
+            return self.net(x)
 
     inputs_tensor = torch.from_numpy(X).float()
     targets_tensor = torch.from_numpy(y).float()
@@ -48,8 +48,9 @@ if __name__ == "__main__":
     model = ColorMLP()
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
+    print("Training starts")
     start = time.time()
-    for epoch in range(10):
+    for epoch in range(100):
         epoch_start = time.time()
         for batch_inputs, batch_targets in loader:
             # prof.step()
@@ -63,5 +64,5 @@ if __name__ == "__main__":
         print(f'Epoch {epoch}, Loss: {loss.item():.6f}, Epoch time: {time.time() - epoch_start:.2f}s')
     # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
     h, w = og.shape[:2]
-    smp.reconstruct_image(model, "cpu", h, w)
-    smp.reconstruct_image(model, "cpu", h, w, 4, bench=True)
+    smp.reconstruct_image(model, "cpu", h, w, bench=False)
+    smp.reconstruct_image(model, "cpu", h, w, 4, bench=False)
