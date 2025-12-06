@@ -7,7 +7,7 @@ from PIL import Image
 from sympy import false
 from torch.profiler import profile, record_function, ProfilerActivity
 
-def load_image(path: os.PathLike): return np.array(Image.open("data/oa.png").convert("RGB"), dtype=np.float32) / 255.0
+def load_image(path: os.PathLike): return np.array(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
 
 
 def image_init(path: os.PathLike):
@@ -40,7 +40,7 @@ def upsample(img, scale):
     samples = samples.reshape(-1, 3)
     return indices, samples
 
-def reconstruct_image(model, device, height, width, z = 1, bench = False, halved = False):
+def reconstruct_image(model, device, height, width, z = 1, bench = False, name = "reconstructed"):
     model.eval()
     h, w = z*height, z*width
     y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
@@ -59,5 +59,5 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, halved
 
         predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
         predicted_colors = predicted_colors.astype(dtype=np.uint8)
-        Image.fromarray(predicted_colors).save(f"reconstructed{z}.png")
-        print(f"✓ Reconstructed image with {z} zoom saved: reconstructed{z}.png")
+        Image.fromarray(predicted_colors).save(f"reconstructed/{name}{z}x.png")
+        print(f"✓ Reconstructed {name} with {z}x zoom saved: {name}{z}x.png")
