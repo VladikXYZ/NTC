@@ -4,3 +4,5 @@ Output/**
 # Ignore .idea and .venv
 .idea/
 .venv/
+
+lama.jpg
