@@ -5,19 +5,26 @@ import time
 import torch
 from torch import nn, optim
 from torch.utils.data import TensorDataset, DataLoader
-
-import FMN
-import MLP
 import preprocessing as prep
 import numpy as np
+import models
+
+import argparse
+parser = argparse.ArgumentParser(description="Example script")
+parser.add_argument("-img", help="input file path")
+parser.add_argument("-nn", help="model")
+testable = {"fmn" : models.NeuralDetailMapper, "mlp" : models.ColorMLP}
 
 
 if __name__ == "__main__":
-    img_path: os.PathLike = pth.Path("data/aa.png")
+    args = parser.parse_args()
+    if not args.img: args.img = "data/aa.png"
+    if not args.nn: args.nn = "mlp"
+    img_path: os.PathLike = pth.Path(args.img)
     og, test_indices = prep.image_init(img_path)
     og = prep.load_image(img_path)
     all_X, all_y = [], []
-    for scale in [1, 2, 3, 5, 7, 11]:
+    for scale in [1]:
         X, y = prep.upsample(og, scale)
         all_X.append(X)
         all_y.append(y)
@@ -37,7 +44,7 @@ if __name__ == "__main__":
     loader = DataLoader(dataset, batch_size=max(256, 4096 * is_cuda), shuffle=True, num_workers=12 * is_cuda,
                         pin_memory=is_cuda)
 
-    model = MLP.ColorMLP().to(device)
+    model = testable[args.nn]().to(device) #MLP.ColorMLP().to(device)
     # model = FMN.NeuralDetailMapper().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
