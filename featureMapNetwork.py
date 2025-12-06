@@ -10,7 +10,9 @@ import os
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using:", device)
 
-INPUT_IMAGE = "oa.png"
+INPUT_IMAGE = "Input/oa.png"
+if not os.path.exists("Output"):
+    os.makedirs("Output")
 
 # --- KONFIGURACE ---
 CONFIG = {
@@ -156,7 +158,7 @@ pbar.close()
 
 # --- 3. UKLÁDÁNÍ (SAVE) ---
 print("\nSaving model checkpoint...")
-checkpoint_path = "lama_model.pth"
+checkpoint_path = "Output/saved_model.pth"
 
 torch.save({
     'model_state_dict': model.state_dict(), # Toto uloží GRID (feature mapy), váhy MLP i frekvence šumu
@@ -166,34 +168,79 @@ torch.save({
 
 print(f"Model saved to {checkpoint_path}")
 
-# --- 4. EXPERIMENT: JAK TO PAK NAČÍST (LOAD) ---
-# Tento kód můžeš použít v úplně novém souboru, kde nebudeš trénovat.
+# --- 4. MEMORY-SAFE GENERATION (TILED RENDERING) ---
+# This function solves the OOM issue by rendering small squares at a time
 
-def load_trained_model(path):
-    print(f"Loading from {path}...")
-    checkpoint = torch.load(path, map_location=device)
+def render_tiled(model, total_h, total_w, tile_size=512):
+    """
+    Renders the image in small squares (tiles) to save VRAM.
+    """
+    print(f"Rendering {total_w}x{total_h} in {tile_size}x{tile_size} tiles...")
     
-    # 1. Načteme config
-    loaded_config = checkpoint['config']
+    # 1. Create an empty canvas on CPU RAM (not GPU!)
+    full_image = Image.new('RGB', (total_w, total_h))
     
-    # 2. Vytvoříme PRÁZDNY model podle configu
-    new_model = NeuralDetailMapper(loaded_config).to(device)
+    # 2. Calculate how many tiles we need
+    y_steps = range(0, total_h, tile_size)
+    x_steps = range(0, total_w, tile_size)
     
-    # 3. Nasypeme tam naučené váhy
-    new_model.load_state_dict(checkpoint['model_state_dict'])
-    new_model.eval() # Přepnout do eval módu (vypne dropou, fixne batchnorm kdyby tam byl)
-    
-    print("Model loaded successfully!")
-    return new_model
+    total_tiles = len(y_steps) * len(x_steps)
+    pbar = tqdm(total=total_tiles, desc="Stitching tiles")
 
-# Test exportu s "nově" načteným modelem
-loaded_model = load_trained_model(checkpoint_path)
+    model.eval()
+    with torch.no_grad():
+        for y in y_steps:
+            for x in x_steps:
+                # Calculate dimensions for this tile (last tile might be smaller)
+                h_curr = min(tile_size, total_h - y)
+                w_curr = min(tile_size, total_w - x)
+                
+                # Normalize coordinates (0.0 to 1.0) for the Model
+                y_start = y / total_h
+                y_end = (y + h_curr) / total_h
+                x_start = x / total_w
+                x_end = (x + w_curr) / total_w
+                
+                # Render ONLY this small part on GPU
+                chunk_tensor = model.render_tile(
+                    h_curr, 
+                    w_curr, 
+                    y_range=(y_start, y_end), 
+                    x_range=(x_start, x_end)
+                )
+                
+                # Move to CPU immediately
+                chunk_img = ToPILImage()(chunk_tensor[0].clamp(0, 1).cpu())
+                
+                # Paste into the main CPU canvas
+                full_image.paste(chunk_img, (x, y))
+                
+                pbar.update(1)
+                
+                # Force cleanup just in case
+                del chunk_tensor
+                # torch.cuda.empty_cache() 
 
-with torch.no_grad():
-    # Render native resolution
-    print("Rendering native resolution from loaded model...")
-    recon = loaded_model.render_tile(H, W, (0,1), (0,1))[0].detach().cpu()
-    ToPILImage()(recon).save("output_loaded_native.png")
-    print("Saved output_loaded_native.png")
+    pbar.close()
+    return full_image
 
+# --- EXECUTION ---
+
+# Load model (fresh load to prove it works)
+checkpoint = torch.load(checkpoint_path, map_location=device)
+loaded_model = NeuralDetailMapper(checkpoint['config']).to(device)
+loaded_model.load_state_dict(checkpoint['model_state_dict'])
+
+# Define target resolution - Let's try 2x upscaling as a test
+# You can increase this significantly now!
+TARGET_H = H * 2
+TARGET_W = W * 2
+
+# Run the tiled render
+final_image = render_tiled(loaded_model, TARGET_H, TARGET_W, tile_size=512)
+
+# Save
+save_path = f"Output/output_tiled_{TARGET_W}x{TARGET_H}.png"
+final_image.save(save_path)
+print(f"Saved high-res image to {save_path}")
 print("Done.")

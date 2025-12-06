@@ -15,7 +15,7 @@ from torch.profiler import profile, ProfilerActivity
 
 
 if __name__ == "__main__":
-    img = Image.open("aa.png").convert('RGB')
+    img = Image.open("Input/aa.png").convert('RGB')
     img_array = np.array(img, dtype=np.float32) / 255.0
     og, test_indices = smp.image_init(img_array)
     og = img_array

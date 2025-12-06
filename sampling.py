@@ -55,5 +55,5 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, halved
 
         predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
         predicted_colors = predicted_colors.astype(dtype=np.uint8)
-        Image.fromarray(predicted_colors).save(f"reconstructed{z}.png")
-        print(f"✓ Reconstructed image with {z} zoom saved: reconstructed{z}.png")
+        Image.fromarray(predicted_colors).save(f"Output/reconstructed{z}.png")
+        print(f"✓ Reconstructed image with {z} zoom saved: Output/reconstructed{z}.png")

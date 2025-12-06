@@ -1,2 +1,6 @@
-.idea
-.venv
+# Ignore contents of any Input/Output folder
+Output/**
+
+# Ignore .idea and .venv
+.idea/
+.venv/
