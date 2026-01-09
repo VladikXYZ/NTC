@@ -4,7 +4,6 @@ import scipy as scp
 import numpy as np
 import torch
 from PIL import Image
-from sympy import false
 from torch.profiler import profile, record_function, ProfilerActivity
 
 def load_image(path: os.PathLike): return np.array(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
@@ -32,7 +31,7 @@ def image_init(path: os.PathLike):
     indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)  # (N, 2)
     return samples, indices
 
-def upsample(img, scale):
+def upsample(img: np.ndarray[np.ndarray[np.float32]], scale):
     samples = scp.ndimage.zoom(img, (scale, scale, 1), order=1)  # order=1 = bilinear
     h, w = samples.shape[:2]
     y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
@@ -61,3 +60,30 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, name =
         predicted_colors = predicted_colors.astype(dtype=np.uint8)
         Image.fromarray(predicted_colors).save(f"reconstructed/{name}{z}x.png")
         print(f"✓ Reconstructed {name} with {z}x zoom saved: {name}{z}x.png")
+
+def reconstruct_fourier(model, device, height, width, z, bench = False, name = "reconstructed"):
+    model.eval()
+    h, w = z * height, z * width
+    y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
+    test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)
+    test_indices = fourier_encoding(test_indices)
+    vertex_uvs = torch.from_numpy(test_indices).float().to(device)
+    predicted_colors = model(vertex_uvs)
+
+    predicted_colors = predicted_colors.cpu().detach().numpy().reshape(h, w, 3) * 255
+    predicted_colors = predicted_colors.astype(dtype=np.uint8)
+    Image.fromarray(predicted_colors).save(f"reconstructed/{name}{z}x.png")
+    print(f"✓ Reconstructed {name} with {z}x zoom saved: {name}{z}x.png")
+
+def fourier_encoding(X: np.ndarray[np.ndarray[np.float32]], freqs = 2):
+    x_coords = X[:,0]
+    y_coords = X[:,1]
+    result = np.zeros((4*freqs, X.shape[0]))
+    for i in range(freqs):
+        freq = 1 << i  # Frequencies: 1, 2, 4, 8
+        index = i*4
+        result[index] = np.sin(2 * np.pi * freq * y_coords)
+        result[index + 1] = np.cos(2 * np.pi * freq * y_coords)
+        result[index + 2] = np.sin(2 * np.pi * freq * x_coords)
+        result[index + 3] = np.cos(2 * np.pi * freq * x_coords)
+    return result.T
