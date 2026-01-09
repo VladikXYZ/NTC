@@ -19,7 +19,7 @@ testable = {"fmn" : models.NeuralDetailMapper, "mlp" : models.ColorMLP}
 if __name__ == "__main__":
     args = parser.parse_args()
     if not args.img: args.img = "data/aa.png"
-    if not args.nn: args.nn = "mlp"
+    if not args.nn: args.nn = "fmn"
     img_path: os.PathLike = pth.Path(args.img)
     og, test_indices = prep.image_init(img_path)
     og = prep.load_image(img_path)
