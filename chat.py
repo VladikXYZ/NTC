@@ -226,7 +226,7 @@ def reconstruct(model, device, h, w, scale, file_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/f8.png", help="Path to input image")
+    parser.add_argument("--img", type=str, default="data/w8.png", help="Path to input image")
     parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
