@@ -81,3 +81,63 @@ if __name__ == "__main__":
     # prep.reconstruct_fourier(model, device, h, w, 2, name=file_name)
     prep.reconstruct_image(model, device, h, w, name=file_name)
     prep.reconstruct_image(model, device, h, w, 4, bench=False, name=file_name)
+
+
+
+
+# def train(model, coords, colors, device, epochs=50, batch_size=16384):
+#     print(f"\n--- Starting Training on {device} ---")
+#
+#     # Dataset
+#     dataset = TensorDataset(
+#         torch.from_numpy(coords).float(),
+#         torch.from_numpy(colors).float()
+#     )
+#
+#     # Optimized DataLoader
+#     use_cuda = device.type == 'cuda'
+#     loader = DataLoader(
+#         dataset,
+#         batch_size=batch_size,
+#         shuffle=True,
+#         num_workers=12 if use_cuda else 0,
+#         pin_memory=use_cuda
+#     )
+#
+#     optimizer = optim.Adam(model.parameters(), lr=1e-2)
+#
+#     # Reduce LR on plateau for fine details
+#     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+#         optimizer, mode='min', factor=0.5, patience=5
+#     )
+#
+#     criterion = nn.MSELoss()
+#
+#     start_time = time.time()
+#     model.train()
+#
+#     for epoch in range(epochs):
+#         total_loss = 0
+#         batches = 0
+#
+#         for bx, by in loader:
+#             bx, by = bx.to(device, non_blocking=True), by.to(device, non_blocking=True)
+#
+#             optimizer.zero_grad(set_to_none=True)
+#             preds = model(bx)
+#             loss = criterion(preds, by)
+#             loss.backward()
+#             optimizer.step()
+#
+#             total_loss += loss.item()
+#             batches += 1
+#
+#         avg_loss = total_loss / batches
+#         scheduler.step(avg_loss)
+#
+#         # Calculate PSNR every few epochs
+#         if (epoch + 1) % 5 == 0 or epoch == 0:
+#             psnr = -10 * math.log10(avg_loss) if avg_loss > 0 else 100
+#             print(f"Epoch {epoch + 1:03d}/{epochs} | Loss: {avg_loss:.6f} | PSNR: {psnr:.2f}dB")
+#
+#     print(f"Training Time: {time.time() - start_time:.2f}s")
