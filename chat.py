@@ -10,6 +10,8 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
 
+from compare import calculate_absolute_difference
+
 
 # ==========================================
 # 1. SOTA ARCHITECTURE: FEATURE PYRAMID
@@ -212,7 +214,7 @@ def reconstruct(model, device, h, w, scale, file_name):
     # Save
     elapsed = time.time() - start_time
     final_img = (np.clip(img_reshaped, 0, 1) * 255).astype(np.uint8)
-    output_path = f"reconstructed/{file_name}_{scale}x.png"
+    output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
     Image.fromarray(final_img).save(output_path)
     print(f"✓ Saved to {output_path}")
     print(f"  Time: {elapsed:.2f}s | Throughput: {total_pixels / elapsed / 1e6:.2f} MP/s")
@@ -224,7 +226,7 @@ def reconstruct(model, device, h, w, scale, file_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/rw1.png", help="Path to input image")
+    parser.add_argument("--img", type=str, default="data/f4.png", help="Path to input image")
     parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
@@ -259,5 +261,6 @@ if __name__ == "__main__":
 
     img_path: os.PathLike = pth.Path(args.img)
     file_name = img_path.stem
-    for s in [1]:
+    for s in [0.25, 0.5, 1]:
         reconstruct(model, device, h, w, s, file_name)
+    calculate_absolute_difference(file_name[0])
