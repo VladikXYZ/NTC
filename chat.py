@@ -106,7 +106,7 @@ def load_image_data(path):
     img_np = np.array(img, dtype=np.float32) / 255.0
     h, w = img_np.shape[:2]
 
-    print(f"Loaded Image: {w}x{h}")
+    # print(f"Loaded Image: {w}x{h}")
 
     # Generate pixel center coordinates
     # We want coordinates to correspond exactly to pixel centers
@@ -125,15 +125,15 @@ def load_image_data(path):
 # ==========================================
 
 def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
-    print(f"\n--- Starting Optimized Training on {device} ---")
-    print("Moving dataset to VRAM...")
+    # print(f"\n--- Starting Optimized Training on {device} ---")
+    # print("Moving dataset to VRAM...")
     all_coords = torch.from_numpy(coords).float().to(device)
     all_colors = torch.from_numpy(colors).float().to(device)
     num_pixels = all_coords.shape[0]
 
     try:
         model = torch.compile(model)
-        print("Model compiled with torch.compile() ✓")
+        # print("Model compiled with torch.compile() ✓")
     except:
         print("torch.compile not available, skipping.")
 
@@ -184,12 +184,12 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
 # ==========================================
 
 def reconstruct(model, device, h, w, scale, file_name):
-    print(f"\n--- Reconstructing at Scale {scale}x ---")
+    # print(f"\n--- Reconstructing at Scale {scale}x ---")
     model.eval()
 
     new_h, new_w = int(h * scale), int(w * scale)
     total_pixels = new_h * new_w
-    print(f"Target Resolution: {new_w}x{new_h}")
+    # print(f"Target Resolution: {new_w}x{new_h}")
 
     # Dense coordinates for inference
     y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
@@ -216,7 +216,7 @@ def reconstruct(model, device, h, w, scale, file_name):
     final_img = (np.clip(img_reshaped, 0, 1) * 255).astype(np.uint8)
     output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
     Image.fromarray(final_img).save(output_path)
-    print(f"✓ Saved to {output_path}")
+    # print(f"✓ Saved to {output_path}")
     print(f"  Time: {elapsed:.2f}s | Throughput: {total_pixels / elapsed / 1e6:.2f} MP/s")
 
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
     parser.add_argument("--img", type=str, default="data/w8.png", help="Path to input image")
     parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
-    parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
     parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
     parser.add_argument("--levels", type=int, default=6, help="Number of pyramid levels")
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     else:
         device = torch.device('cpu')
-        print("Using CPU")
+        # print("Using CPU")
 
     # 1. Load
     try:
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     print(f"Model Parameters: {total_params:,}")
     train_optimized(model, coords, colors, device, epochs=args.epochs)
     torch.save(model.state_dict(), args.model_path)
-    print(f"Model saved: {args.model_path}")
+    # print(f"Model saved: {args.model_path}")
 
     img_path: os.PathLike = pth.Path(args.img)
     file_name = img_path.stem

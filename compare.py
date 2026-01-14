@@ -12,10 +12,10 @@ def calculate_absolute_difference(file_name):
         img1_path, img2_path, output_path = f"data/{o}.png", f"reconstructed/{r}.png", f"reconstructed/{out}.png"
 
         # 1. Load Images
-        print(f"Loading {img1_path}...")
+        # print(f"Loading {img1_path}...")
         img1 = Image.open(img1_path).convert('RGB')
 
-        print(f"Loading {img2_path}...")
+        # print(f"Loading {img2_path}...")
         img2 = Image.open(img2_path).convert('RGB')
 
         # 3. Convert to float32 for math (prevents uint8 overflow/wrap-around)
@@ -36,4 +36,4 @@ def calculate_absolute_difference(file_name):
         # Clip to valid range [0, 255] and convert to byte
         diff_img = Image.fromarray(diff_arr.astype(np.uint8))
         diff_img.save(output_path)
-        print(f"✓ Difference image saved to: {output_path}")
+        # print(f"✓ Difference image saved to: {output_path}")
