@@ -10,68 +10,40 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
 
-from compare import calculate_absolute_difference
-
 
 # ==========================================
 # 1. SOTA ARCHITECTURE: FEATURE PYRAMID
 # ==========================================
 
 class LatentFeaturePyramid(nn.Module):
-    def __init__(self,
-                 feature_dim=4,  # Features per grid level
-                 base_res=16,  # Lowest resolution
-                 levels=4,  # Number of levels (32, 64, 128, 256, 512, 1024)
-                 hidden_dim=64):  # MLP hidden size
+    def __init__(self, feature_dim=4, base_res=16, levels=4, hidden_dim=64):
         super().__init__()
-
         self.levels = levels
         self.feature_dim = feature_dim
-
-        # 1. Create a Pyramid of Grids
-        # Instead of one grid, we use multiple at geometric resolutions.
-        # This provides "SOTA" quality by separating low/high freq details
-        # without using hash collisions or random noise.
         self.grids = nn.ParameterList([])
         current_res = base_res
 
         print(f"Initializing Feature Pyramid with {levels} levels:")
         for i in range(levels):
             print(f"  - Level {i}: {current_res}x{current_res} (Features: {feature_dim})")
-            # Initialize with small random noise for training stability
-            grid = nn.Parameter(
-                torch.randn(1, feature_dim, current_res, current_res) * 0.01
-            )
+            grid = nn.Parameter(torch.randn(1, feature_dim, current_res, current_res) * 0.01)
             self.grids.append(grid)
             current_res *= 2
 
-        # 2. MLP Decoder
-        # Input size is sum of all level features
         input_dim = levels * feature_dim
-
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, 3),  # RGB Output
-            nn.Sigmoid()  # Force [0, 1] range
-        )
+            nn.Linear(hidden_dim, 3),
+            nn.Sigmoid() )
 
     def forward(self, coords):
-        """
-        coords: (Batch, 2) in range [0, 1]
-        """
         batch_size = coords.shape[0]
-
-        # 1. Prepare coordinates for grid_sample
-        # grid_sample expects [-1, 1], we have [0, 1]
-        # (N, 1, 1, 2) format required for 4D input
         grid_input = (coords * 2 - 1).view(1, 1, batch_size, 2)
 
         features_list = []
-
-        # 2. Sample from every level of the pyramid
         for grid in self.grids:
             # Result: (1, Feature_Dim, 1, Batch)
             sampled = torch.nn.functional.grid_sample(
@@ -84,11 +56,7 @@ class LatentFeaturePyramid(nn.Module):
             # Reshape to (Batch, Feature_Dim)
             features_list.append(sampled.squeeze(2).squeeze(0).t())
 
-        # 3. Concatenate all levels
-        # Shape: (Batch, Levels * Feature_Dim)
         combined_features = torch.cat(features_list, dim=-1)
-
-        # 4. Decode to RGB
         rgb = self.mlp(combined_features)
 
         return rgb
@@ -106,16 +74,12 @@ def load_image_data(path):
     img_np = np.array(img, dtype=np.float32) / 255.0
     h, w = img_np.shape[:2]
 
-    # print(f"Loaded Image: {w}x{h}")
-
-    # Generate pixel center coordinates
-    # We want coordinates to correspond exactly to pixel centers
     y = np.linspace(0.5 / h, 1 - 0.5 / h, h)
     x = np.linspace(0.5 / w, 1 - 0.5 / w, w)
     ys, xs = np.meshgrid(y, x, indexing='ij')
 
-    coords = np.stack([ys.flatten(), xs.flatten()], axis=1)  # (N, 2)
-    colors = img_np.reshape(-1, 3)  # (N, 3)
+    coords = np.stack([ys.flatten(), xs.flatten()], axis=1)
+    colors = img_np.reshape(-1, 3)
 
     return coords, colors, h, w
 
@@ -125,26 +89,20 @@ def load_image_data(path):
 # ==========================================
 
 def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
-    # print(f"\n--- Starting Optimized Training on {device} ---")
-    # print("Moving dataset to VRAM...")
     all_coords = torch.from_numpy(coords).float().to(device)
     all_colors = torch.from_numpy(colors).float().to(device)
     num_pixels = all_coords.shape[0]
 
-    try:
-        model = torch.compile(model)
-        # print("Model compiled with torch.compile() ✓")
-    except:
-        print("torch.compile not available, skipping.")
+    # try:
+    #     model = torch.compile(model)
+    # except:
+    #     print("torch.compile not available, skipping.")
 
+    if device == "cpu": batch_size = 256
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
-    scaler = torch.amp.GradScaler()
+    scaler = torch.amp.GradScaler(str(device))
     criterion = nn.MSELoss()
-
-    # Calculate iterations per epoch based on batch size
-    # We want to cover roughly the whole image per epoch
     steps_per_epoch = math.ceil(num_pixels / batch_size)
-
     model.train()
     start_time = time.time()
 
@@ -157,19 +115,14 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
             batch_y = all_colors[indices]
 
             optimizer.zero_grad(set_to_none=True)
-
-            with torch.amp.autocast("cuda"):
+            with torch.amp.autocast(str(device)):
                 preds = model(batch_X)
                 loss = criterion(preds, batch_y)
-
-            # Scale gradients and step
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-
             epoch_loss += loss.item()
 
-        # Logging
         if (epoch + 1) % 5 == 0 or epoch == 0:
             avg_loss = epoch_loss / steps_per_epoch
             psnr = -10 * math.log10(avg_loss) if avg_loss > 0 else 100
@@ -184,23 +137,16 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
 # ==========================================
 
 def reconstruct(model, device, h, w, scale, file_name):
-    # print(f"\n--- Reconstructing at Scale {scale}x ---")
     model.eval()
-
     new_h, new_w = int(h * scale), int(w * scale)
     total_pixels = new_h * new_w
-    # print(f"Target Resolution: {new_w}x{new_h}")
-
-    # Dense coordinates for inference
     y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
     x = np.linspace(0.5 / new_w, 1 - 0.5 / new_w, new_w)
     ys, xs = np.meshgrid(y, x, indexing='ij')
     coords = torch.from_numpy(np.stack([ys.flatten(), xs.flatten()], axis=1)).float().to(device)
-    # Batched Inference to handle any resolution on 3060
     batch_size = 32768*8
     preds_list = []
 
-    # Use torch.no_grad and stream to CPU to save VRAM
     start_time = time.time()
     with torch.no_grad():
         for i in range(0, len(coords), batch_size):
@@ -211,24 +157,46 @@ def reconstruct(model, device, h, w, scale, file_name):
     full_img = np.concatenate(preds_list, axis=0)
     img_reshaped = full_img.reshape(new_h, new_w, 3)
 
-    # Save
     elapsed = time.time() - start_time
     final_img = (np.clip(img_reshaped, 0, 1) * 255).astype(np.uint8)
     output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
     Image.fromarray(final_img).save(output_path)
-    # print(f"✓ Saved to {output_path}")
     print(f"  Time: {elapsed:.2f}s | Throughput: {total_pixels / elapsed / 1e6:.2f} MP/s")
 
 
 # ==========================================
-# 5. MAIN
+# 5. ERROR CALCULATION
+# ==========================================
+
+def calculate_absolute_difference(file_name):
+    og = [file_name + str(x) for x in [1, 2, 4]]
+    rec = [f"{file_name}8_{str(x)}k" for x in [1, 2, 4]]
+    outputs = [file_name + str(x) + "diff" for x in [1, 2, 4]]
+    for o, r, out in zip(og, rec, outputs):
+        img1_path, img2_path, output_path = f"data/{o}.png", f"reconstructed/{r}.png", f"reconstructed/{out}.png"
+        img1 = Image.open(img1_path).convert('RGB')
+        img2 = Image.open(img2_path).convert('RGB')
+        arr1 = np.array(img1, dtype=np.float32)
+        arr2 = np.array(img2, dtype=np.float32)
+
+        diff_arr = np.abs(arr1 - arr2)
+        mae = np.mean(diff_arr)
+        print(f"\n--- Statistics ---")
+        print(f"Mean Absolute Error (MAE): {mae:.4f} (Avg pixel deviation)")
+        print(f"Max Difference: {np.max(diff_arr):.4f}")
+
+        diff_img = Image.fromarray(diff_arr.astype(np.uint8))
+        diff_img.save(output_path)
+
+# ==========================================
+# 6. MAIN
 # ==========================================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/r8.png", help="Path to input image")
+    parser.add_argument("--img", type=str, default="data/aa.png", help="Path to input image")
     parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
-    parser.add_argument("--epochs", type=int, default=250, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
     parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
     parser.add_argument("--levels", type=int, default=6, help="Number of pyramid levels")
@@ -237,16 +205,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Device Config
     if torch.cuda.is_available():
         device = torch.device('cuda')
         torch.backends.cudnn.benchmark = True
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     else:
         device = torch.device('cpu')
-        # print("Using CPU")
+        print("Using CPU")
 
-    # 1. Load
     try:
         coords, colors, h, w = load_image_data(args.img)
     except Exception as e:
@@ -258,7 +224,6 @@ if __name__ == "__main__":
     print(f"Model Parameters: {total_params:,}")
     train_optimized(model, coords, colors, device, epochs=args.epochs)
     torch.save(model.state_dict(), args.model_path)
-    # print(f"Model saved: {args.model_path}")
 
     img_path: os.PathLike = pth.Path(args.img)
     file_name = img_path.stem
