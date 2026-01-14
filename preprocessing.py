@@ -5,6 +5,8 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.profiler import profile, record_function, ProfilerActivity
+from torch.utils.data import DataLoader, TensorDataset
+
 
 def load_image(path: os.PathLike): return np.array(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
 
@@ -44,6 +46,10 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, name =
     h, w = z*height, z*width
     y_coords, x_coords = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w))
     test_indices = np.stack([y_coords.flatten(), x_coords.flatten()], axis=1)
+    dataset = TensorDataset(torch.from_numpy(test_indices).float())
+    is_cuda = (str(device) == 'cuda')
+    inference_loader = DataLoader(dataset, batch_size=max(256, 4096*2 * is_cuda), shuffle=False, num_workers=12 * is_cuda,
+                        pin_memory=is_cuda)
     with torch.no_grad():
         vertex_uvs = torch.from_numpy(test_indices).float().to(device)
         if bench:
@@ -53,10 +59,17 @@ def reconstruct_image(model, device, height, width, z = 1, bench = False, name =
                     predicted_colors = model(vertex_uvs)
 
             print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-        else: predicted_colors = model(vertex_uvs)
+        else:
+            all_predictions = []
+            for batch in inference_loader:
+                # DataLoader wraps single-tensor datasets in a list like [batch_x]
+                batch_x = batch[0].to(device)
 
+                preds = model(batch_x)
+                all_predictions.append(preds.cpu())
 
-        predicted_colors = predicted_colors.cpu().numpy().reshape(h, w, 3)*255
+        final_output = torch.cat(all_predictions, dim=0)
+        predicted_colors = final_output.cpu().numpy().reshape(h, w, 3)*255
         predicted_colors = predicted_colors.astype(dtype=np.uint8)
         Image.fromarray(predicted_colors).save(f"reconstructed/{name}{z}x.png")
         print(f"✓ Reconstructed {name} with {z}x zoom saved: {name}{z}x.png")
