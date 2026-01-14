@@ -93,10 +93,10 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
     all_colors = torch.from_numpy(colors).float().to(device)
     num_pixels = all_coords.shape[0]
 
-    # try:
-    #     model = torch.compile(model)
-    # except:
-    #     print("torch.compile not available, skipping.")
+    try:
+        model = torch.compile(model)
+    except:
+        print("torch.compile not available, skipping.")
 
     if device == "cpu": batch_size = 256
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
