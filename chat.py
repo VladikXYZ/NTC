@@ -231,7 +231,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
     parser.add_argument("--levels", type=int, default=6, help="Number of pyramid levels")
     parser.add_argument("--feats", type=int, default=4, help="Features per level")
-
+    parser.add_argument("--export", action="store_true", help="Export weights to JSON for Unity")
+    
     args = parser.parse_args()
 
     # Device Config
@@ -261,3 +262,9 @@ if __name__ == "__main__":
     file_name = img_path.stem
     for s in [1]:
         reconstruct(model, device, h, w, s, file_name)
+
+    # Export?
+    if args.export:
+        import unity_bridge
+        print("\n--- Exporting for Unity ---")
+        unity_bridge.export_model_for_unity(model, file_name)
