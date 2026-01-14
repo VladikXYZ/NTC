@@ -6,7 +6,7 @@ import os
 
 def calculate_absolute_difference(file_name):
     og = [file_name + str(x) for x in [1, 2, 4]]
-    rec = [f"{file_name}4_{str(x)}k" for x in [1, 2, 4]]
+    rec = [f"{file_name}8_{str(x)}k" for x in [1, 2, 4]]
     outputs = [file_name + str(x) + "diff" for x in [1, 2, 4]]
     for o, r, out in zip(og, rec, outputs):
         img1_path, img2_path, output_path = f"data/{o}.png", f"reconstructed/{r}.png", f"reconstructed/{out}.png"
