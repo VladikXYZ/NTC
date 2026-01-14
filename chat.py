@@ -226,9 +226,9 @@ def reconstruct(model, device, h, w, scale, file_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/w8.png", help="Path to input image")
+    parser.add_argument("--img", type=str, default="data/r8.png", help="Path to input image")
     parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
-    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=250, help="Training epochs")
     parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
     parser.add_argument("--levels", type=int, default=6, help="Number of pyramid levels")
@@ -262,12 +262,13 @@ if __name__ == "__main__":
 
     img_path: os.PathLike = pth.Path(args.img)
     file_name = img_path.stem
-    for s in [0.125, 0.25, 0.5]:
-        reconstruct(model, device, h, w, s, file_name)
-    calculate_absolute_difference(file_name[0])
-
-    # Export?
-    if args.export:
-        import unity_bridge
-        print("\n--- Exporting for Unity ---")
-        unity_bridge.export_model_for_unity(model, file_name)
+    reconstruct(model, device, h, w, 1, file_name)
+    # for s in [0.125, 0.25, 0.5]:
+    #     reconstruct(model, device, h, w, s, file_name)
+    # calculate_absolute_difference(file_name[0])
+    #
+    # # Export?
+    # if args.export:
+    #     import unity_bridge
+    #     print("\n--- Exporting for Unity ---")
+    #     unity_bridge.export_model_for_unity(model, file_name)
