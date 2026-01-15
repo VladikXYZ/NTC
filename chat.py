@@ -7,6 +7,7 @@ import pathlib as pth
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sympy import true
 from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
 
@@ -108,9 +109,11 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
 
     for epoch in range(epochs):
         epoch_loss = 0
-
-        for _ in range(steps_per_epoch):
-            indices = torch.randint(0, num_pixels, (batch_size,), device=device)
+        perm = torch.randperm(num_pixels, device=device)
+        for i in range(steps_per_epoch):
+            start_idx = i * batch_size
+            end_idx = min(start_idx + batch_size, num_pixels)
+            indices = perm[start_idx:end_idx]
             batch_X = all_coords[indices]
             batch_y = all_colors[indices]
 
@@ -135,33 +138,40 @@ def train_optimized(model, coords, colors, device, epochs=50, batch_size=65536):
 # ==========================================
 # 4. RECONSTRUCTION
 # ==========================================
+class Reconstruct:
 
-def reconstruct(model, device, h, w, scale, file_name):
-    model.eval()
-    new_h, new_w = int(h * scale), int(w * scale)
-    total_pixels = new_h * new_w
-    y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
-    x = np.linspace(0.5 / new_w, 1 - 0.5 / new_w, new_w)
-    ys, xs = np.meshgrid(y, x, indexing='ij')
-    coords = torch.from_numpy(np.stack([ys.flatten(), xs.flatten()], axis=1)).float().to(device)
-    batch_size = 32768*8
-    preds_list = []
+    def multi_reconstruct(self, model, device, h, w, scales, file_name):
+        max_scale = max(scales)
+        model.eval()
+        new_h, new_w = int(h * max_scale), int(w * max_scale)
+        total_pixels = new_h * new_w
+        self.output = torch.zeros((total_pixels, 3)).to(device)
+        for scale in scales:
+            new_h, new_w = int(h * scale), int(w * scale)
+            y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
+            x = np.linspace(0.5 / new_w, 1 - 0.5 / new_w, new_w)
+            ys, xs = np.meshgrid(y, x, indexing='ij')
+            coords = torch.from_numpy(np.stack([ys.flatten(), xs.flatten()], axis=1)).float().to(device)
+            self.reconstruct(model, coords, coords.shape[0], file_name)
 
-    start_time = time.time()
-    with torch.no_grad():
-        for i in range(0, len(coords), batch_size):
-            chunk = coords[i:i + batch_size]
-            output = model(chunk)
-            preds_list.append(output.cpu().numpy())
 
-    full_img = np.concatenate(preds_list, axis=0)
-    img_reshaped = full_img.reshape(new_h, new_w, 3)
+    def reconstruct(self, model, coords, total,  file_name):
+        batch_size = 32768*256
+        start_time = time.time()
+        with torch.no_grad():
+            for i in range(0, total, batch_size):
+                idx1, idx2 = i, min(total, i+batch_size)
+                chunk = coords[idx1:idx2]
+                self.output[idx1:idx2] = model(chunk)
 
-    elapsed = time.time() - start_time
-    final_img = (np.clip(img_reshaped, 0, 1) * 255).astype(np.uint8)
-    output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
-    Image.fromarray(final_img).save(output_path)
-    print(f"  Time: {elapsed:.2f}s | Throughput: {total_pixels / elapsed / 1e6:.2f} MP/s")
+        # full_img = np.concatenate(preds_list, axis=0)
+        # img_reshaped = self.output.reshape(new_h, new_w, 3)
+
+        elapsed = time.time() - start_time
+        # final_img = (np.clip(img_reshaped.cpu().numpy(), 0, 1) * 255).astype(np.uint8)
+        # output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
+        # Image.fromarray(final_img).save(output_path)
+        print(f"  Time: {elapsed:.4f}s | Throughput: {coords.shape[0] / elapsed / 1e6:.2f} MP/s")
 
 
 # ==========================================
@@ -194,15 +204,10 @@ def calculate_absolute_difference(file_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/aa.png", help="Path to input image")
-    parser.add_argument("--scale", type=float, default=2.0, help="Output scale factor")
+    parser.add_argument("--img", type=str, default="data/r8.png", help="Path to input image")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
-    parser.add_argument("--out", type=str, default="reconstructed.png", help="Output filename")
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
-    parser.add_argument("--levels", type=int, default=6, help="Number of pyramid levels")
-    parser.add_argument("--feats", type=int, default=4, help="Features per level")
     parser.add_argument("--export", action="store_true", help="Export weights to JSON for Unity")
-
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -219,19 +224,32 @@ if __name__ == "__main__":
         print(f"Error: {e}")
         exit()
 
-    model = LatentFeaturePyramid(base_res=16, levels=6).to(device)
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"Model Parameters: {total_params:,}")
-    train_optimized(model, coords, colors, device, epochs=args.epochs)
-    torch.save(model.state_dict(), args.model_path)
+    train = False
+    base = 16
+    levels = 4
+    feature_dim = 4
+    if train:
+        model = LatentFeaturePyramid(base_res=base, levels=levels, feature_dim=feature_dim).to(device)
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"Model Parameters: {total_params:,}")
+        train_optimized(model, coords, colors, device, epochs=args.epochs)
+        torch.save(model.state_dict(), args.model_path)
+    else:
+        model = LatentFeaturePyramid(base_res=base, levels=levels, feature_dim=feature_dim).to(device)
+
+        # 2. Load the weights
+        model.load_state_dict(torch.load("latent_model.pth", map_location=device))
 
     img_path: os.PathLike = pth.Path(args.img)
     file_name = img_path.stem
-    reconstruct(model, device, h, w, 1, file_name)
-    # for s in [0.125, 0.25, 0.5]:
+    # reconstruct(model, device, h, w, 1, file_name)
+    rec = Reconstruct()
+    scales = [0.125, 0.125, 0.25, 0.5, 1, 1.5]
+    rec.multi_reconstruct(model, device, h, w, scales, file_name)
+    # for s in :
     #     reconstruct(model, device, h, w, s, file_name)
     # calculate_absolute_difference(file_name[0])
-    #
+
     # # Export?
     # if args.export:
     #     import unity_bridge
