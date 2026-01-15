@@ -206,7 +206,7 @@ def calculate_absolute_difference(file_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Latent Feature Pyramid Texture Reconstruction")
-    parser.add_argument("--img", type=str, default="data/r8.png", help="Path to input image")
+    parser.add_argument("--img", type=str, default="data/u8.png", help="Path to input image")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
     parser.add_argument("--model_path", type=str, default="latent_model.pth", help="Model save path")
     parser.add_argument("--export", action="store_true", help="Export weights to JSON for Unity")
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     file_name = img_path.stem
     # reconstruct(model, device, h, w, 1, file_name)
     rec = Reconstruct()
-    scales = [0.125, 0.125, 0.25, 0.5]
+    scales = [0.125, 0.125, 0.25, 0.5, 1, 1.5]
     rec.multi_reconstruct(model, device, h, w, scales, file_name)
     # for s in :
     #     reconstruct(model, device, h, w, s, file_name)
