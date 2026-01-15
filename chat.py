@@ -10,7 +10,7 @@ import torch.optim as optim
 from sympy import true
 from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
-
+Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
 # 1. SOTA ARCHITECTURE: FEATURE PYRAMID
@@ -145,32 +145,34 @@ class Reconstruct:
         model.eval()
         new_h, new_w = int(h * max_scale), int(w * max_scale)
         total_pixels = new_h * new_w
-        self.output = torch.zeros((total_pixels, 3)).to(device)
+        self.output = torch.zeros((total_pixels, 3)).to(torch.uint8).to(device)
         for scale in scales:
             new_h, new_w = int(h * scale), int(w * scale)
             y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
             x = np.linspace(0.5 / new_w, 1 - 0.5 / new_w, new_w)
             ys, xs = np.meshgrid(y, x, indexing='ij')
             coords = torch.from_numpy(np.stack([ys.flatten(), xs.flatten()], axis=1)).float().to(device)
-            self.reconstruct(model, coords, coords.shape[0], file_name)
+            self.reconstruct(model, coords, new_h, new_w,  file_name)
 
 
-    def reconstruct(self, model, coords, total,  file_name):
+    def reconstruct(self, model, coords, h, w,  file_name):
         batch_size = 32768*256
+        total = w*h
         start_time = time.time()
         with torch.no_grad():
             for i in range(0, total, batch_size):
                 idx1, idx2 = i, min(total, i+batch_size)
                 chunk = coords[idx1:idx2]
-                self.output[idx1:idx2] = model(chunk)
+                self.output[idx1:idx2] = (model(chunk)*255).to(torch.uint8)
 
         # full_img = np.concatenate(preds_list, axis=0)
-        # img_reshaped = self.output.reshape(new_h, new_w, 3)
-
+        # img_reshaped = self.output.reshape(h, w, 3)
         elapsed = time.time() - start_time
+        # print(img_reshaped.shape)
         # final_img = (np.clip(img_reshaped.cpu().numpy(), 0, 1) * 255).astype(np.uint8)
-        # output_path = f"reconstructed/{file_name}_{new_w//1000}k.png"
-        # Image.fromarray(final_img).save(output_path)
+        final_img = self.output[:total].reshape(h, w, 3).cpu().numpy()
+        output_path = f"reconstructed/{file_name}_{w//1000}k.png"
+        Image.fromarray(final_img).save(output_path)
         print(f"  Time: {elapsed:.4f}s | Throughput: {coords.shape[0] / elapsed / 1e6:.2f} MP/s")
 
 
@@ -226,7 +228,7 @@ if __name__ == "__main__":
 
     train = False
     base = 16
-    levels = 4
+    levels = 6
     feature_dim = 4
     if train:
         model = LatentFeaturePyramid(base_res=base, levels=levels, feature_dim=feature_dim).to(device)
@@ -244,7 +246,7 @@ if __name__ == "__main__":
     file_name = img_path.stem
     # reconstruct(model, device, h, w, 1, file_name)
     rec = Reconstruct()
-    scales = [0.125, 0.125, 0.25, 0.5, 1, 1.5]
+    scales = [0.125, 0.125, 0.25, 0.5]
     rec.multi_reconstruct(model, device, h, w, scales, file_name)
     # for s in :
     #     reconstruct(model, device, h, w, s, file_name)
