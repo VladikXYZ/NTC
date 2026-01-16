@@ -145,7 +145,8 @@ class Reconstruct:
         model.eval()
         new_h, new_w = int(h * max_scale), int(w * max_scale)
         total_pixels = new_h * new_w
-        self.output = torch.zeros((total_pixels, 3)).to(torch.uint8).to(device)
+        self.output_fp = torch.zeros((total_pixels, 3)).to(torch.uint8).to(device)
+        self.output_ui = torch.zeros((total_pixels, 3)).to(torch.uint8).to(device)
         for scale in scales:
             new_h, new_w = int(h * scale), int(w * scale)
             y = np.linspace(0.5 / new_h, 1 - 0.5 / new_h, new_h)
@@ -163,16 +164,17 @@ class Reconstruct:
             for i in range(0, total, batch_size):
                 idx1, idx2 = i, min(total, i+batch_size)
                 chunk = coords[idx1:idx2]
-                self.output[idx1:idx2] = (model(chunk)*255).to(torch.uint8)
+                self.output_fp[idx1:idx2] = model(chunk)
 
-        # full_img = np.concatenate(preds_list, axis=0)
-        # img_reshaped = self.output.reshape(h, w, 3)
+        self.output_ui = self.output_fp*255
         elapsed = time.time() - start_time
-        # print(img_reshaped.shape)
         # final_img = (np.clip(img_reshaped.cpu().numpy(), 0, 1) * 255).astype(np.uint8)
-        final_img = self.output[:total].reshape(h, w, 3).cpu().numpy()
-        output_path = f"reconstructed/{file_name}_{w//1000}k.png"
-        Image.fromarray(final_img).save(output_path)
+
+
+        # final_img = self.output_ui[:total].reshape(h, w, 3).cpu().numpy()
+        # output_path = f"reconstructed/{file_name}_{w//1000}k.png"
+        # Image.fromarray(final_img).save(output_path)
+
         print(f"  Time: {elapsed:.4f}s | Throughput: {coords.shape[0] / elapsed / 1e6:.2f} MP/s")
 
 
@@ -214,7 +216,7 @@ if __name__ == "__main__":
 
     if torch.cuda.is_available():
         device = torch.device('cuda')
-        torch.backends.cudnn.benchmark = True
+        # torch.backends.cudnn.benchmark = True
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     else:
         device = torch.device('cpu')
@@ -246,7 +248,7 @@ if __name__ == "__main__":
     file_name = img_path.stem
     # reconstruct(model, device, h, w, 1, file_name)
     rec = Reconstruct()
-    scales = [0.125, 0.125, 0.25, 0.5, 1, 1.5]
+    scales = [0.125, 0.125, 0.25, 0.5, 1, 1.25, 1.5]
     rec.multi_reconstruct(model, device, h, w, scales, file_name)
     # for s in :
     #     reconstruct(model, device, h, w, s, file_name)
