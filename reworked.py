@@ -39,7 +39,7 @@ class LatentFeaturePyramid(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, 3),
+            nn.Linear(hidden_dim, 1),
             nn.Sigmoid() )
 
     def forward(self, coords):
@@ -79,18 +79,32 @@ def load_image_data(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Image not found at {path}")
 
+    # 1. Load and Normalize
     img = Image.open(path).convert("RGB")
     img_np = np.array(img, dtype=np.float32) / 255.0
     h, w = img_np.shape[:2]
 
-    y = np.linspace(0.5 / h, 1 - 0.5 / h, h)
-    x = np.linspace(0.5 / w, 1 - 0.5 / w, w)
-    ys, xs = np.meshgrid(y, x, indexing='ij')
+    # 2. Extract Channels
+    R = img_np[..., 0]
+    G = img_np[..., 1]
+    B = img_np[..., 2]
 
-    coords = np.stack([ys.flatten(), xs.flatten()], axis=1)
-    colors = img_np.reshape(-1, 3)
+    # 3. Calculate Y (Luma) only
+    # Formula: Y = R/4 + G/2 + B/4
+    # We skip Co and Cg since you requested only Y.
+    Y = 0.25 * R + 0.5 * G + 0.25 * B
 
-    return coords, colors, h, w
+    # 4. Generate Coordinates (UVs)
+    # Using cell centers (0.5 offset)
+    y_coords = np.linspace(0.5 / h, 1 - 0.5 / h, h)
+    x_coords = np.linspace(0.5 / w, 1 - 0.5 / w, w)
+    ys, xs = np.meshgrid(y_coords, x_coords, indexing='ij')
+
+    # 5. Flatten Data
+    coords = np.stack([ys.flatten(), xs.flatten()], axis=1)  # Shape: (N, 2)
+    y_values = Y.reshape(-1, 1)                              # Shape: (N, 1)
+
+    return coords, y_values, h, w
 
 
 # ==========================================
@@ -150,12 +164,15 @@ class Reconstruct:
 
     def multi_reconstruct(self, model, device, h, w, scales, file_name, save=False):
         max_scale = max(scales)
-        # model = torch.compile(model, mode="max-autotune")
         model.eval()
         new_h, new_w = int(h * max_scale), int(w * max_scale)
         total_pixels = new_h * new_w
+
         self.output_fp = torch.zeros((total_pixels, 3)).to(device)
+
         self.output_ui = torch.zeros((total_pixels, 3)).to(torch.uint8).to(device)
+        # while input("Enter: ") != "e":
+        #     pass
         self.save = save
         for scale in scales:
             new_h, new_w = int(h * scale), int(w * scale)
@@ -167,9 +184,8 @@ class Reconstruct:
 
 
     def reconstruct(self, model, coords, h, w,  file_name):
-        batch_size = 32768*256
+        batch_size = 32768*8
         total = w*h
-        # start_time = time.time()
 
         with profile(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -185,17 +201,16 @@ class Reconstruct:
                         self.output_fp[idx1:idx2] = model(chunk)
 
             self.output_ui = (self.output_fp*255).to(torch.uint8)
-            # elapsed = time.time() - start_time
-        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+        # print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=30))
         if self.save:
             output_path = f"reconstructed/{file_name}_{w // 1000}k.png"
             to_save = self.output_ui[:total].reshape(h, w, 3)
             final_img = to_save.cpu().numpy()
             Image.fromarray(final_img).save(output_path)
 
-        # final_img = self.output_ui[:total].reshape(h, w, 3).cpu().numpy()
-        # output_path = f"reconstructed/{file_name}_{w//1000}k.png"
-        # Image.fromarray(final_img).save(output_path)
+        final_img = self.output_ui[:total].reshape(h, w, 3).cpu().numpy()
+        output_path = f"reconstructed/{file_name}_{w//1000}k.png"
+        Image.fromarray(final_img).save(output_path)
 
         # print(f" Time: {elapsed:.4f}s | Throughput: {coords.shape[0] / elapsed / 1e6:.2f} MP/s | Reconstructed {h}x{w}")
 
@@ -204,15 +219,17 @@ class Reconstruct:
 # ==========================================
 
 if __name__ == "__main__":
-    train = True
+    train = False
     save = True
+    export = True
     base = 512
     feature_dim = 4
     epochs = 1000
-    path = "data/r8.png"
+    path = "data/r1.png"
     img_path: os.PathLike = pth.Path(path)
     file_name = img_path.stem
     model_path = f"models/{file_name}.pth"
+    print(model_path)
 
     if torch.cuda.is_available():
         device = torch.device('cuda')
@@ -233,16 +250,18 @@ if __name__ == "__main__":
         total_params = sum(p.numel() for p in model.parameters())
         print(f"Model Parameters: {total_params:,}")
         train_optimized(model, coords, colors, device, epochs=epochs)
-        torch.save(model.state_dict(), model_path)
+        if export: torch.save(model.state_dict(), model_path)
     else:
         model = LatentFeaturePyramid(base_res=base, feature_dim=feature_dim).to(device)
         model.load_state_dict(torch.load(model_path, map_location=device))
+        model = torch.compile(model, mode="max-autotune", fullgraph=True)
+        model.to(device)
         rec = Reconstruct()
-        scales = [0.125, 0.125, 0.25, 0.5, 1, 1.25]
+        scales = [1,2,3,4]
         rec.multi_reconstruct(model, device, h, w, scales, file_name, save)
 
     # # Export?
-    # if args.export:
-    #     import unity_bridge
-    #     print("\n--- Exporting for Unity ---")
-    #     unity_bridge.export_model_for_unity(model, file_name)
+# if export:
+#     import unity_bridge
+#     print("\n--- Exporting for Unity ---")
+#     unity_bridge.export_model_for_unity(model, file_name)
