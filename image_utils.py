@@ -34,9 +34,11 @@ def YCoCg_conv(img):
     return np.stack((Y, Co, Cg), axis=-1)
 
 def save_image(name, img,colorspace = "rgb"):
-    if img.dtype.kind != "u": raise TypeError(f"img must be unsigned integer not {img.dtype}")
-    # os.makedirs(colorspace, exist_ok = True)
-    path = f"converted/{name}{img.dtype.kind}{img.dtype.itemsize*8}{colorspace}.png"
+    if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
+    result = img
+    if img.dtype.kind == "f": result = (img*255).astype(np.uint8)
+    temp = name.split("_")[0]
+    path = f"converted/{temp}_{result.dtype.kind}{result.dtype.itemsize*8}{colorspace}.png"
     # print(path)
     cv2.imwrite(path, img)
 
