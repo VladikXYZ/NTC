@@ -40,7 +40,7 @@ def calculate_metrics(img1, img2, calculate_lpips=False):
             if len(img.shape) == 2:  # Handle grayscale
                 img = np.stack([img] * 3, axis=-1)
             t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
-            return (t / 127.5) - 1.0
+            return t*2 - 1
 
         img1_t = prepare_tensor(img1)
         img2_t = prepare_tensor(img2)
