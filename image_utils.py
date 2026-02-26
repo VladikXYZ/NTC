@@ -37,8 +37,8 @@ def save_image(name, img,colorspace = "rgb"):
     if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
     result = img
     if img.dtype.kind == "f": result = (img*255).astype(np.uint8)
+    result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
     temp = name.split("_")[0]
     path = f"converted/{temp}_{result.dtype.kind}{result.dtype.itemsize*8}{colorspace}.png"
-    # print(path)
-    cv2.imwrite(path, img)
+    cv2.imwrite(path, result)
 
