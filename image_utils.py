@@ -1,11 +1,14 @@
+import os
+
 import cv2
 import numpy as np
 
 
 def load_image(image_path):
     img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-    if img.shape[2] >=4: img = img[:, :, :3]
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if len(img.shape) >= 3:
+        if img.shape[2] >=4: img = img[:, :, :3]
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
 def uint8_conv(img):
@@ -30,7 +33,10 @@ def YCoCg_conv(img):
     Cg = np.right_shift(g,1) - np.right_shift(r,2) - np.right_shift(b,2)
     return np.stack((Y, Co, Cg), axis=-1)
 
-def save_image(path, img):
+def save_image(name, img,colorspace = "rgb"):
     if img.dtype.kind != "u": raise TypeError(f"img must be unsigned integer not {img.dtype}")
+    # os.makedirs(colorspace, exist_ok = True)
+    path = f"converted/{name}{img.dtype.kind}{img.dtype.itemsize*8}{colorspace}.png"
+    # print(path)
     cv2.imwrite(path, img)
 
