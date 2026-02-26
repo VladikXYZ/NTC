@@ -11,6 +11,11 @@ def load_image(image_path):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
+def tensor_float_load(image_path):
+    img = float_conv(load_image(image_path))
+    tensor = torch.from_numpy(img)
+    return tensor
+
 def uint8_conv(img):
     if img.dtype.kind != "u": raise TypeError(f"img must be unsigned integer not {img.dtype}")
     result = img >> 8*(img.dtype.itemsize-1)
@@ -33,12 +38,13 @@ def YCoCg_conv(img):
     Cg = np.right_shift(g,1) - np.right_shift(r,2) - np.right_shift(b,2)
     return np.stack((Y, Co, Cg), axis=-1)
 
-def save_image(name, img,colorspace = "rgb"):
+def save_image(name, img,colorspace = "rgb", generated=False):
     if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
     result = img
     if img.dtype.kind == "f": result = (img*255).astype(np.uint8)
     result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
     temp = name.split("_")[0]
+    if generated: temp += "gen"
     path = f"converted/{temp}_{result.dtype.kind}{result.dtype.itemsize*8}{colorspace}.png"
     cv2.imwrite(path, result)
 
