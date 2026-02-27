@@ -2,11 +2,11 @@ import math
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 import image_utils as iu
 import torch
-
 
 COLOR_SPACE = "Y"
 OUTPUT_DIMS = {"RGB": 3, "YCoCg": 3, "Y":1}
@@ -15,8 +15,8 @@ HIDDEN_DIM = 32
 FEATURE_DIM = 16
 FEATURES_CHANNEL = 4
 POSITIONAL_ENCODING = 0
-BASE_RES = 1024
-EPOCHS = 100
+BASE_RES = 128
+EPOCHS = 10
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = max(4096, (2**18)*(DEVICE=="cuda"))
 
@@ -29,14 +29,7 @@ def _create_mlp():
     return torch.nn.Sequential(
         torch.nn.Linear(FEATURE_DIM, HIDDEN_DIM),torch.nn.ReLU(inplace=True),
         torch.nn.Linear(HIDDEN_DIM, HIDDEN_DIM), torch.nn.ReLU(inplace=True),
-        torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),torch.nn.Tanh())
-
-def _create_positional_encoding(coords):
-    freq_bands = (2.0 ** torch.arange(POSITIONAL_ENCODING, device=coords.device)) * math.pi
-    scaled = coords.unsqueeze(-1) * freq_bands
-    encoded = torch.cat([torch.sin(scaled), torch.cos(scaled)], dim=-1)
-    res = encoded.view(coords.shape[0], -1)
-    return res
+        torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),torch.nn.Sigmoid())
 
 def _fit(model,img):
     if img.dtype != torch.float32: raise TypeError(f"img must be np.float32 not {img.dtype}")
@@ -51,7 +44,7 @@ def _fit(model,img):
     #     except: print("torch.compile not available, skipping.")
 
     steps = math.ceil(num_pixels / BATCH_SIZE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.02)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.02, fused=True)
     scaler = torch.amp.GradScaler(DEVICE)
     model.train()
     print(f"Training on {DEVICE} started ...")
@@ -74,7 +67,7 @@ def _fit(model,img):
                 preds = model(batch_X)
                 batch_loss = ((preds - batch_y).pow(2)).sum()
                 loss = batch_loss/(end_idx-start_idx)
-                epoch_loss += batch_loss
+                epoch_loss += batch_loss.detach()
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -122,18 +115,41 @@ class PNTC(torch.nn.Module):
         for grid in self.grids:
             sampled = torch.nn.functional.grid_sample(
                 grid, grid_input, mode='bilinear',
-                padding_mode='border', align_corners=True)
-            features_list.append(sampled.squeeze().t())
+                padding_mode='zeroes', align_corners=True)
+            features_list.append(sampled.squeeze().contiguous().t())
         combined_features = torch.cat(features_list, dim=-1)
         rgb = self.mlp(combined_features)
         return rgb
 
-img_path = Path(f"converted/r4_u8{COLOR_SPACE}.png")
+class CNTC(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        print(f"Grid: {BASE_RES}x{BASE_RES} (Features: {FEATURE_DIM})\nOutput dim: {OUTPUT_DIM}")
+        self.grids = torch.nn.Parameter(torch.randn(1, FEATURE_DIM, BASE_RES, BASE_RES) * 0.01)
+        self.mlp = _create_mlp()
+        grid_params = self.grids.numel()
+        mlp_params = sum(p.numel() for p in self.mlp.parameters())
+        total_params = grid_params+mlp_params
+        print(f"Grid parameters: {grid_params:,}\nMLP parameters: {mlp_params:,}\nTotal parameters: {total_params:,}")
+        self.to(DEVICE)
+
+    def forward(self, coords):
+        coords = coords.view(1, 1, -1, 2)
+        features =  torch.nn.functional.grid_sample( self.grids, coords, mode='bilinear',
+                padding_mode='zeroes', align_corners=True )
+        features = features.squeeze().permute(1, 0).contiguous()
+        colors = self.mlp(features)
+        return colors
+
+img_path = Path(f"converted/r1_u8{COLOR_SPACE}.png")
+# img = iu.load_image(img_path)
+# img = cv2.resize(img, (512,512), interpolation=cv2.INTER_LINEAR)
+# tensor = torch.from_numpy(iu.float_conv(img))
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 dev = "cuda" if torch.cuda.is_available() else "cpu"
-model = PNTC()
+model = CNTC()
 _fit(model, tensor)
-for size in [1024,2048,4096]:
-    gen = _generate(model, size, size)
-    iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, True)
+# for size in [1024,2048,4096]:
+#     gen = _generate(model, size, size)
+#     iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, True)

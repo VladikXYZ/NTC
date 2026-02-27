@@ -33,8 +33,6 @@ Model saved to latent_model.pth
 """
 
 
-from config import *
-
 class NTC(nn.Module):
     def __init__(self, feature_dim=28, base_res=256, hidden_dim=32, device='cpu'):
         super().__init__()

@@ -6,7 +6,7 @@ import image_utils as iu
 #     print(f)
 #     path = Path(f"data/{f}")
 #     iu.full_copy(path)
-for x in [1,2,4,8]:
+for x in [1,2]:
     path = Path(f"data/r{x}.png")
     iu.Y_copy(path, True)
 

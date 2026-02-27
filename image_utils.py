@@ -27,7 +27,6 @@ def uint8_conv(img):
 def float_conv(img):
     if img.dtype.kind != "u": raise TypeError(f"img must be unsigned integer not {img.dtype}")
     result = img/(np.power(256, img.dtype.itemsize)-1)
-    print(result.max())
     return result.astype(np.float32)
 
 def Y_conv(img):
