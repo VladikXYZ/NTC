@@ -27,6 +27,7 @@ def uint8_conv(img):
 def float_conv(img):
     if img.dtype.kind != "u": raise TypeError(f"img must be unsigned integer not {img.dtype}")
     result = img/(np.power(256, img.dtype.itemsize)-1)
+    print(result.max())
     return result.astype(np.float32)
 
 def Y_conv(img):
@@ -110,4 +111,11 @@ def full_copy(img_path):
     YCoCg = YCoCg_conv(res)
     save_image(img_path.stem, YCoCg, "YCoCg", False)
     Y = YCoCg[:, :, 0]
+    save_image(img_path.stem, Y, "Y", False)
+
+def Y_copy(img_path, uint8=False):
+    res = load_image(img_path)
+    YCoCg = YCoCg_conv(res)
+    Y = YCoCg[:, :, 0]
+    if uint8: Y = np.right_shift(Y, (res.dtype.itemsize-1)*8).astype(np.uint8)
     save_image(img_path.stem, Y, "Y", False)

@@ -6,8 +6,11 @@ import image_utils as iu
 #     print(f)
 #     path = Path(f"data/{f}")
 #     iu.full_copy(path)
-# iu.full_copy(Path("data/r8.png"))
-og = iu.float_conv(iu.load_image("converted/r1_u8Y.png"))
-gen = iu.float_conv(iu.load_image("converted/r4gen_u8Y.png"))
-snr, psnr, ssim, lpips = iu.calculate_metrics(og, gen, True)
-print(f"PSNR: {psnr:.2f} dB\nSNR:  {snr:.2f} dB\nSSIM: {ssim:.3f}\nLPIPS: {lpips:.3f}")
+for x in [1,2,4,8]:
+    path = Path(f"data/r{x}.png")
+    iu.Y_copy(path, True)
+
+# og = iu.float_conv(iu.load_image("converted/r1_u8Y.png"))
+# gen = iu.float_conv(iu.load_image("converted/r4gen_u8Y.png"))
+# snr, psnr, ssim, lpips = iu.calculate_metrics(og, gen, True)
+# print(f"PSNR: {psnr:.2f} dB\nSNR:  {snr:.2f} dB\nSSIM: {ssim:.3f}\nLPIPS: {lpips:.3f}")
