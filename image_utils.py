@@ -15,7 +15,7 @@ def load_image(image_path):
     return img
 
 def tensor_float_load(image_path):
-    img = float_conv(uint8_conv(load_image(image_path)))
+    img = float_conv(load_image(image_path))
     tensor = torch.from_numpy(img)
     return tensor
 
