@@ -9,7 +9,7 @@ import torch.nn as nn
 COLOR_SPACE = "Y"
 OUTPUT_DIMS = {"RGB": 3, "YCoCg": 3, "Y":1}
 OUTPUT_DIM = OUTPUT_DIMS[COLOR_SPACE]
-EPOCHS = 1000
+EPOCHS = 100
 
 class NTC(nn.Module):
     def __init__(self, feature_dim=16, base_res=256, hidden_dim=32, device='cpu'):
@@ -76,25 +76,28 @@ class NTC(nn.Module):
                 with torch.amp.autocast(self.device):
                     preds = self(batch_X)
                     loss = criterion(batch_y, preds)
-                epoch_loss += loss.item()
+
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
+                epoch_loss += loss.item()
 
             psnr = 20 * np.log10(1 / np.sqrt(epoch_loss))
-            print(f"Epoch {epoch:3d}, Loss: {epoch_loss:.5f}, PSNR: {psnr}, Time: {time.time() - ep_start:.3f}")
+            print(f"Epoch {epoch:3d}, Loss: {epoch_loss:.5f}, PSNR: {psnr:.2f}, Time: {time.time() - ep_start:.3f}")
         print(f"Training done in {time.time() - start:.3f} seconds")
 
 
     def generate(self, h,w):
         num_pixels = h*w
+        model.eval()
         coords = self._create_coords(h,w).to(self.device)
         steps = math.ceil(num_pixels / self.batch_size)
         colors = torch.zeros((num_pixels, OUTPUT_DIM))
-        for i in range(steps):
-            start_idx = i * self.batch_size
-            end_idx = min(start_idx + self.batch_size, num_pixels)
-            colors[start_idx:end_idx] = self(coords[start_idx:end_idx])
+        with torch.no_grad():
+            for i in range(steps):
+                start_idx = i * self.batch_size
+                end_idx = min(start_idx + self.batch_size, num_pixels)
+                colors[start_idx:end_idx] = self(coords[start_idx:end_idx])
         colors = colors.reshape((h,w, OUTPUT_DIM)).cpu().detach().numpy()
         return colors
 
@@ -102,7 +105,7 @@ class NTC(nn.Module):
 
 
 
-img_path = Path(f"converted/r1_u16{COLOR_SPACE}.png")
+img_path = Path(f"converted/r4_u8{COLOR_SPACE}.png")
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 dev = "cuda" if torch.cuda.is_available() else "cpu"

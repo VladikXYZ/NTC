@@ -105,3 +105,9 @@ def full_copy(img_path):
     save_image(img_path.stem, YCoCg, "YCoCg", False)
     Y = YCoCg[:,:,0]
     save_image(img_path.stem, Y, "Y", False)
+    res = uint8_conv(res)
+    save_image(img_path.stem, res, "RGB", False)
+    YCoCg = YCoCg_conv(res)
+    save_image(img_path.stem, YCoCg, "YCoCg", False)
+    Y = YCoCg[:, :, 0]
+    save_image(img_path.stem, Y, "Y", False)
