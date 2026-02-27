@@ -1,11 +1,13 @@
+import os
 from pathlib import Path
 import image_utils as iu
 
-og_path = Path("data/r1.png")
-# gen_path = Path("converted/r1u8Ygenu8Y.png")
-# og = iu.load_image(og_path)
-# iu.save_image(og_path.stem, og)
-iu.tensor_float_load(og_path)
-# gen = iu.load_image(gen_path)
-# snr, psnr, ssim, lpips = iu.calculate_metrics(iu.float_conv(og), iu.float_conv(gen), True)
-# print(f"PSNR: {psnr:.2f} dB\nSNR:  {snr:.2f} dB\nSSIM: {ssim:.2f}\nLPIPS: {lpips:.2f}")
+# for f in sorted(os.listdir("data/")):
+#     print(f)
+#     path = Path(f"data/{f}")
+#     iu.full_copy(path)
+# iu.full_copy(Path("data/r4.png"))
+og = iu.float_conv(iu.load_image("converted/r1_u16Y.png"))
+gen = iu.float_conv(iu.load_image("converted/r1gen_u8Y.png"))
+snr, psnr, ssim, lpips = iu.calculate_metrics(og, gen, True)
+print(f"PSNR: {psnr:.2f} dB\nSNR:  {snr:.2f} dB\nSSIM: {ssim:.3f}\nLPIPS: {lpips:.3f}")

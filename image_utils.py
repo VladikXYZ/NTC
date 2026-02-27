@@ -1,3 +1,5 @@
+import os
+
 import cv2
 from lpips import LPIPS
 import numpy as np
@@ -5,6 +7,7 @@ import torch
 
 
 def load_image(image_path):
+    if not os.path.exists(image_path): raise FileNotFoundError(f"{image_path} does not exist")
     img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
     if len(img.shape) >= 3:
         if img.shape[2] >=4: img = img[:, :, :3]
@@ -12,7 +15,7 @@ def load_image(image_path):
     return img
 
 def tensor_float_load(image_path):
-    img = float_conv(load_image(image_path))
+    img = float_conv(uint8_conv(load_image(image_path)))
     tensor = torch.from_numpy(img)
     return tensor
 
@@ -38,11 +41,11 @@ def YCoCg_conv(img):
     Cg = np.right_shift(g,1) - np.right_shift(r,2) - np.right_shift(b,2)
     return np.stack((Y, Co, Cg), axis=-1)
 
-def save_image(name, img,colorspace = "rgb", generated=False):
+def save_image(name, img,colorspace = "RGB", generated=False):
     if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
-    result = img
-    if img.dtype.kind == "f": result = (img*255).astype(np.uint8)
-    result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+    result = img.squeeze()
+    if result.dtype.kind == "f": result = (result*255).astype(np.uint8)
+    if len(result.shape) >= 3: result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
     temp = name.split("_")[0]
     if generated: temp += "gen"
     path = f"converted/{temp}_{result.dtype.kind}{result.dtype.itemsize*8}{colorspace}.png"
@@ -95,3 +98,10 @@ def calculate_metrics(img1, img2, calculate_lpips=False):
 
     return snr, psnr, ssim, lpips
 
+def full_copy(img_path):
+    res = load_image(img_path)
+    save_image(img_path.stem, res, "RGB", False)
+    YCoCg = YCoCg_conv(res)
+    save_image(img_path.stem, YCoCg, "YCoCg", False)
+    Y = YCoCg[:,:,0]
+    save_image(img_path.stem, Y, "Y", False)

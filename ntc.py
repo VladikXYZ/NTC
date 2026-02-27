@@ -2,35 +2,34 @@ import math
 import time
 from pathlib import Path
 
-import cv2
-
 import image_utils as iu
 import numpy as np
 import torch
 import torch.nn as nn
-OUTPUT_DIM = 1
-EPOCHS = 1
+COLOR_SPACE = "Y"
+OUTPUT_DIMS = {"RGB": 3, "YCoCg": 3, "Y":1}
+OUTPUT_DIM = OUTPUT_DIMS[COLOR_SPACE]
+EPOCHS = 1000
 
 class NTC(nn.Module):
     def __init__(self, feature_dim=16, base_res=256, hidden_dim=32, device='cpu'):
         super().__init__()
         self.feature_dim = feature_dim
         self.device = device
-        self.batch_size = max(4096//2, (2**14)*(self.device == "cuda"))
-        print(f"  - Levels: {base_res}x{base_res} (Features: {feature_dim})")
+        self.batch_size = max(4096//2, (2**17)*(self.device == "cuda"))
+        print(f"Grid: {base_res}x{base_res} (Features: {feature_dim})\nOutput dim: {OUTPUT_DIM}")
         self.grid = nn.Parameter(torch.randn(1, feature_dim, base_res, base_res) * 0.01)
         self.mlp = nn.Sequential(
             nn.Linear(feature_dim, hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, 1),
+            nn.Linear(hidden_dim, OUTPUT_DIM),
             nn.Sigmoid())
         grid_params = self.grid.numel()
         mlp_params = sum(p.numel() for p in self.mlp.parameters())
         total_params = grid_params+mlp_params
         print(f"Grid parameters: {grid_params:,}\nMLP parameters: {mlp_params:,}\nTotal parameters: {total_params:,}")
-        # print(f"Model Parameters: {total_params:,}, {grid_params+mlp_params:,}")
         self.to(device)
 
     def forward(self, coords):
@@ -49,17 +48,13 @@ class NTC(nn.Module):
     def fit(self, img):
         if img.dtype != torch.float32: raise TypeError(f"img must be np.float32 not {img.dtype}")
         colors = img.reshape(-1, OUTPUT_DIM)
-        # print(img.shape)
-        # print(f"Using {self.device}")
         indexes = self._create_coords(img.shape[0], img.shape[1])
         X = indexes.to(self.device)
         y = colors.to(self.device)
         num_pixels = X.shape[0]
-        # print(num_pixels)
 
         steps = math.ceil(num_pixels / self.batch_size)
-        # print(f"steps: {steps}")
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.005)
         criterion = nn.MSELoss()
         scaler = torch.amp.GradScaler(self.device)
         model.train()
@@ -72,20 +67,22 @@ class NTC(nn.Module):
             perm = torch.randperm(num_pixels, device=self.device)
             for i in range(steps):
                 start_idx = i * self.batch_size
-                end_idx = min(start_idx + self.batch_size, num_pixels-1)
+                end_idx = min(start_idx + self.batch_size, num_pixels)
                 indices = perm[start_idx:end_idx]
                 batch_X = X[indices]
                 batch_y = y[indices]
 
                 optimizer.zero_grad(set_to_none=True)
                 with torch.amp.autocast(self.device):
-                    preds = model(batch_X)
-                    loss = criterion(preds, batch_y)
+                    preds = self(batch_X)
+                    loss = criterion(batch_y, preds)
                 epoch_loss += loss.item()
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
-            print(f"Epoch {epoch:3d}, Loss: {epoch_loss:.5f}, Time: {time.time() - ep_start:.3f}")
+
+            psnr = 20 * np.log10(1 / np.sqrt(epoch_loss))
+            print(f"Epoch {epoch:3d}, Loss: {epoch_loss:.5f}, PSNR: {psnr}, Time: {time.time() - ep_start:.3f}")
         print(f"Training done in {time.time() - start:.3f} seconds")
 
 
@@ -96,20 +93,20 @@ class NTC(nn.Module):
         colors = torch.zeros((num_pixels, OUTPUT_DIM))
         for i in range(steps):
             start_idx = i * self.batch_size
-            end_idx = min(start_idx + self.batch_size, num_pixels - 1)
+            end_idx = min(start_idx + self.batch_size, num_pixels)
             colors[start_idx:end_idx] = self(coords[start_idx:end_idx])
-        colors = colors.cpu().detach().numpy().reshape((h,w, OUTPUT_DIM))
+        colors = colors.reshape((h,w, OUTPUT_DIM)).cpu().detach().numpy()
         return colors
 
 
 
 
 
-img_path = Path("converted/r1_u16rgb.png")
+img_path = Path(f"converted/r1_u16{COLOR_SPACE}.png")
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 dev = "cuda" if torch.cuda.is_available() else "cpu"
-model = NTC(feature_dim=16, base_res=256, hidden_dim=32,device=dev)
+model = NTC(feature_dim=16, base_res=256, hidden_dim=16,device=dev)
 model.fit(tensor)
-gen = model.generate(h,w)
-iu.save_image(img_path.stem, gen.astype(dtype=np.uint8), colorspace="Y", generated=True)
+gen = model.generate(1024,1024)
+iu.save_image(img_path.stem, gen, colorspace=COLOR_SPACE, generated=True)
