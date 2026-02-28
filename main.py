@@ -8,7 +8,7 @@ import image_utils as iu
 #     iu.full_copy(path)
 for x in [1,2]:
     path = Path(f"data/r{x}.png")
-    iu.Y_copy(path, True)
+    iu.full_copy(path)
 
 # og = iu.float_conv(iu.load_image("converted/r1_u8Y.png"))
 # gen = iu.float_conv(iu.load_image("converted/r4gen_u8Y.png"))

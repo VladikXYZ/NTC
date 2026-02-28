@@ -41,17 +41,6 @@ def YCoCg_conv(img):
     Cg = np.right_shift(g,1) - np.right_shift(r,2) - np.right_shift(b,2)
     return np.stack((Y, Co, Cg), axis=-1)
 
-def save_image(name, img,colorspace = "RGB", generated=False):
-    if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
-    result = img.squeeze()
-    if result.dtype.kind == "f": result = (result*255).astype(np.uint8)
-    if len(result.shape) >= 3: result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
-    temp = name.split("_")[0]
-    if generated: temp += "gen"
-    path = f"converted/{temp}_{result.dtype.kind}{result.dtype.itemsize*8}{colorspace}.png"
-    cv2.imwrite(path, result)
-
-
 def calculate_metrics(img1, img2, calculate_lpips=False):
     if img1.shape != img2.shape: raise ValueError(f"img1 and img2 have different shapes: {img1.shape}, {img2.shape}")
     if img1.dtype != img2.dtype != np.float32: raise ValueError(f"img1 and img2 must be np.float32: {img1.dtype}, {img2.dtype}")
@@ -98,18 +87,23 @@ def calculate_metrics(img1, img2, calculate_lpips=False):
 
     return snr, psnr, ssim, lpips
 
+def save_image(name, img,colorspace = "RGB", generated=False):
+    if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
+    result = img.squeeze()
+    if result.dtype.kind == "f": result = (result*255).astype(np.uint8)
+    if len(result.shape) >= 3: result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+    gen = "gen" if generated else ""
+    temp = name.split("_")[0]
+    path = f"converted/{temp}_{colorspace}{gen}.png"
+    cv2.imwrite(path, result)
+
+
 def full_copy(img_path):
-    res = load_image(img_path)
+    res = uint8_conv(load_image(img_path))
     save_image(img_path.stem, res, "RGB", False)
     YCoCg = YCoCg_conv(res)
     save_image(img_path.stem, YCoCg, "YCoCg", False)
     Y = YCoCg[:,:,0]
-    save_image(img_path.stem, Y, "Y", False)
-    res = uint8_conv(res)
-    save_image(img_path.stem, res, "RGB", False)
-    YCoCg = YCoCg_conv(res)
-    save_image(img_path.stem, YCoCg, "YCoCg", False)
-    Y = YCoCg[:, :, 0]
     save_image(img_path.stem, Y, "Y", False)
 
 def Y_copy(img_path, uint8=False):
