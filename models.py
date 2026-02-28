@@ -42,8 +42,8 @@ def _fit(zmrd,img):
     num_pixels = X.shape[0]
     model = zmrd
     if DEVICE == "cuda":
-        try: model = torch.compile(model)
-        except Exception as e: print("torch.compile not available, skipping.", e)
+        try: model = torch.compile(model, mode="max-autotune", fullgraph=True)
+        except Exception as e: print('\033[93m' + f"torch.compile not available, skipping.\n{e}" + "\033[0m")
 
     steps = math.ceil(num_pixels / BATCH_SIZE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.02, fused=True)
@@ -106,10 +106,7 @@ class PNTC(torch.nn.Module):
         print(f"Initializing Feature Pyramid with {levels} levels:")
         for i in range(levels):
             print(f"  - Level {i}: {FEATURES_CHANNEL}x{current_res}x{current_res}")
-            grid = torch.nn.Parameter(
-                torch.randn(1, FEATURES_CHANNEL, current_res, current_res)
-                .to(memory_format=torch.channels_last) * 0.01
-            )
+            grid = torch.nn.Parameter(torch.randn(1, FEATURES_CHANNEL, current_res, current_res) * 0.01)
             self.grids.append(grid)
             current_res *= 2
         print(f"Output dim: {OUTPUT_DIM}")

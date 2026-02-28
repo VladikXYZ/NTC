@@ -84,7 +84,7 @@ def calculate_metrics(img1, img2, calculate_lpips=False):
     # Calculate LPIPS
     lpips = -1
     if calculate_lpips:
-        loss_fn_alex = LPIPS(net="vgg")
+        loss_fn_alex = LPIPS(net="alex")
         def prepare_tensor(img):
             if len(img.shape) == 2:  # Handle grayscale
                 img = np.stack([img] * 3, axis=-1)
