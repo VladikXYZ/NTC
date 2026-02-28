@@ -15,10 +15,11 @@ HIDDEN_DIM = 32
 FEATURE_DIM = 16
 FEATURES_CHANNEL = 4
 POSITIONAL_ENCODING = 0
-BASE_RES = 128
-EPOCHS = 10
+BASE_RES = 512
+EPOCHS = 100
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = max(4096, (2**18)*(DEVICE=="cuda"))
+FP16 = True
 
 def _create_coords(h, w):
     xs, ys = np.meshgrid(np.linspace(-1, 1, h), np.linspace(-1, 1, w))
@@ -26,22 +27,23 @@ def _create_coords(h, w):
     return torch.as_tensor(indexes, dtype=torch.float32)
 
 def _create_mlp():
-    return torch.nn.Sequential(
+    model = torch.nn.Sequential(
         torch.nn.Linear(FEATURE_DIM, HIDDEN_DIM),torch.nn.ReLU(inplace=True),
         torch.nn.Linear(HIDDEN_DIM, HIDDEN_DIM), torch.nn.ReLU(inplace=True),
         torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),torch.nn.Sigmoid())
+    return model
 
-def _fit(model,img):
+def _fit(zmrd,img):
     if img.dtype != torch.float32: raise TypeError(f"img must be np.float32 not {img.dtype}")
     colors = img.reshape(-1, OUTPUT_DIM)
     indexes = _create_coords(img.shape[0], img.shape[1])
     X = indexes.to(DEVICE)
     y = colors.to(DEVICE)
     num_pixels = X.shape[0]
-
-    # if DEVICE == "cuda":
-    #     try: model = torch.compile(model)
-    #     except: print("torch.compile not available, skipping.")
+    model = zmrd
+    if DEVICE == "cuda":
+        try: model = torch.compile(model, mode="max-autotune", fullgraph=True)
+        except Exception as e: print('\033[93m' + f"torch.compile not available, skipping.\n{e}" + "\033[0m")
 
     steps = math.ceil(num_pixels / BATCH_SIZE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.02, fused=True)
@@ -72,6 +74,7 @@ def _fit(model,img):
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+
             start_idx += BATCH_SIZE
         epoch_loss = epoch_loss.item()/num_pixels
         psnr = -20 * np.log10(np.sqrt(epoch_loss))
@@ -102,11 +105,17 @@ class PNTC(torch.nn.Module):
         current_res = BASE_RES >> (levels-1)
         print(f"Initializing Feature Pyramid with {levels} levels:")
         for i in range(levels):
-            print(f"  - Level {i}: {current_res}x{current_res} (Features: {FEATURES_CHANNEL})")
+            print(f"  - Level {i}: {FEATURES_CHANNEL}x{current_res}x{current_res}")
             grid = torch.nn.Parameter(torch.randn(1, FEATURES_CHANNEL, current_res, current_res) * 0.01)
             self.grids.append(grid)
             current_res *= 2
+        print(f"Output dim: {OUTPUT_DIM}")
         self.mlp = _create_mlp()
+        grid_params = sum(p.numel() for p in self.grids.parameters())
+        mlp_params = sum(p.numel() for p in self.mlp.parameters())
+        total_params = grid_params + mlp_params
+        print(f"Grid parameters: {grid_params:,}\nMLP parameters: {mlp_params:,}\nTotal parameters: {total_params:,}")
+
         self.to(DEVICE)
 
     def forward(self, coords):
@@ -115,8 +124,8 @@ class PNTC(torch.nn.Module):
         for grid in self.grids:
             sampled = torch.nn.functional.grid_sample(
                 grid, grid_input, mode='bilinear',
-                padding_mode='zeroes', align_corners=True)
-            features_list.append(sampled.squeeze().contiguous().t())
+                padding_mode='zeros', align_corners=True)
+            features_list.append(sampled.squeeze().t())
         combined_features = torch.cat(features_list, dim=-1)
         rgb = self.mlp(combined_features)
         return rgb
@@ -124,7 +133,7 @@ class PNTC(torch.nn.Module):
 class CNTC(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        print(f"Grid: {BASE_RES}x{BASE_RES} (Features: {FEATURE_DIM})\nOutput dim: {OUTPUT_DIM}")
+        print(f"Grid: {FEATURE_DIM}x{BASE_RES}x{BASE_RES}\nOutput dim: {OUTPUT_DIM}")
         self.grids = torch.nn.Parameter(torch.randn(1, FEATURE_DIM, BASE_RES, BASE_RES) * 0.01)
         self.mlp = _create_mlp()
         grid_params = self.grids.numel()
@@ -136,20 +145,17 @@ class CNTC(torch.nn.Module):
     def forward(self, coords):
         coords = coords.view(1, 1, -1, 2)
         features =  torch.nn.functional.grid_sample( self.grids, coords, mode='bilinear',
-                padding_mode='zeroes', align_corners=True )
+                padding_mode='zeros', align_corners=True )
         features = features.squeeze().permute(1, 0).contiguous()
         colors = self.mlp(features)
         return colors
 
-img_path = Path(f"converted/r1_u8{COLOR_SPACE}.png")
-# img = iu.load_image(img_path)
-# img = cv2.resize(img, (512,512), interpolation=cv2.INTER_LINEAR)
-# tensor = torch.from_numpy(iu.float_conv(img))
+img_path = Path(f"converted/r8_u8{COLOR_SPACE}.png")
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 dev = "cuda" if torch.cuda.is_available() else "cpu"
-model = CNTC()
+model = PNTC()
 _fit(model, tensor)
-# for size in [1024,2048,4096]:
-#     gen = _generate(model, size, size)
-#     iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, True)
+for size in [1024,2048,4096]:
+    gen = _generate(model, size, size)
+    iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, True)
