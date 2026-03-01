@@ -1,0 +1,15 @@
+import torch
+
+COLOR_SPACE = "Y"
+OUTPUT_DIMS = {"RGB": 3, "YCoCg": 3, "Y":1}
+OUTPUT_DIM = OUTPUT_DIMS[COLOR_SPACE]
+HIDDEN_DIM = 32
+FEATURE_DIM = 16
+FEATURES_CHANNEL = 4
+POSITIONAL_ENCODING = 0
+BASE_RES = 512
+EPOCHS = 100
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+BATCH_SIZE = max(4096, (2**18)*(DEVICE=="cuda"))
+LPIPS_NET = "alex"
+CUT = 512

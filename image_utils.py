@@ -5,6 +5,8 @@ from lpips import LPIPS
 import numpy as np
 import torch
 
+import config
+
 
 def load_image(image_path):
     if not os.path.exists(image_path): raise FileNotFoundError(f"{image_path} does not exist")
@@ -73,42 +75,51 @@ def calculate_metrics(img1, img2, calculate_lpips=False):
     # Calculate LPIPS
     lpips = -1
     if calculate_lpips:
-        loss_fn_alex = LPIPS(net="alex")
+        loss_fn_alex = LPIPS(net=config.LPIPS_NET).to(config.DEVICE)
         def prepare_tensor(img):
             if len(img.shape) == 2:  # Handle grayscale
                 img = np.stack([img] * 3, axis=-1)
             t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
             return t*2 - 1
 
-        img1_t = prepare_tensor(img1)
-        img2_t = prepare_tensor(img2)
+        img1_t = prepare_tensor(img1).to(config.DEVICE)
+        img2_t = prepare_tensor(img2).to(config.DEVICE)
         dist = loss_fn_alex(img1_t, img2_t)
         lpips = dist.item()
 
     return snr, psnr, ssim, lpips
 
-def save_image(name, img,colorspace = "RGB", generated=False):
+def save_image(name, img, colorspace = "RGB", deep_color=False,  generated=False):
     if img.dtype.kind != "u" and img.dtype.kind != "f": raise TypeError(f"img must be unsigned integer or float, not {img.dtype}")
     result = img.squeeze()
     if result.dtype.kind == "f": result = (result*255).astype(np.uint8)
     if len(result.shape) >= 3: result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+    dc = "DC" if deep_color else ""
     gen = "gen" if generated else ""
     temp = name.split("_")[0]
-    path = f"converted/{temp}_{colorspace}{gen}.png"
+    path = f"converted/{temp}_{colorspace}{dc}{gen}.png"
     cv2.imwrite(path, result)
 
 
-def full_copy(img_path):
-    res = uint8_conv(load_image(img_path))
-    save_image(img_path.stem, res, "RGB", False)
-    YCoCg = YCoCg_conv(res)
-    save_image(img_path.stem, YCoCg, "YCoCg", False)
-    Y = YCoCg[:,:,0]
-    save_image(img_path.stem, Y, "Y", False)
-
-def Y_copy(img_path, uint8=False):
+def full_copy(img_path, deep_color=False):
     res = load_image(img_path)
+    name = img_path.stem
+    if not deep_color: res = uint8_conv(res)
+    save_image(name, res, "RGB", deep_color)
     YCoCg = YCoCg_conv(res)
-    Y = YCoCg[:, :, 0]
-    if uint8: Y = np.right_shift(Y, (res.dtype.itemsize-1)*8).astype(np.uint8)
-    save_image(img_path.stem, Y, "Y", False)
+    save_image(name, YCoCg, "YCoCg", deep_color)
+    Y = YCoCg[:,:,0]
+    save_image(name, Y, "Y", deep_color)
+
+CUT = config.CUT
+
+def get_fft(img):
+    f_coeff = torch.fft.fft2(img)
+    shift = torch.fft.fftshift(f_coeff)
+    mask = torch.zeros_like(shift)
+    mid = f_coeff.shape[0] // 2
+    mask[mid - CUT:mid + CUT, mid - CUT:mid + CUT] = 1
+    shift *= mask
+    magnitude = 20 * torch.log(torch.abs(torch.fft.ifftshift(shift)) + 1e-8)
+    reconstruction = torch.fft.ifft2(torch.fft.ifftshift(shift)).real
+    return reconstruction

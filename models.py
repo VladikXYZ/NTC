@@ -1,25 +1,10 @@
 import math
 import time
 from pathlib import Path
-
-import cv2
 import numpy as np
-
 import image_utils as iu
 import torch
-
-COLOR_SPACE = "Y"
-OUTPUT_DIMS = {"RGB": 3, "YCoCg": 3, "Y":1}
-OUTPUT_DIM = OUTPUT_DIMS[COLOR_SPACE]
-HIDDEN_DIM = 32
-FEATURE_DIM = 16
-FEATURES_CHANNEL = 4
-POSITIONAL_ENCODING = 0
-BASE_RES = 512
-EPOCHS = 100
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = max(4096, (2**18)*(DEVICE=="cuda"))
-FP16 = True
+from config import *
 
 def _create_coords(h, w):
     xs, ys = np.meshgrid(np.linspace(-1, 1, h), np.linspace(-1, 1, w))
@@ -150,12 +135,16 @@ class CNTC(torch.nn.Module):
         colors = self.mlp(features)
         return colors
 
-img_path = Path(f"converted/r8_u8{COLOR_SPACE}.png")
+
+
+img_path = Path(f"converted/r8_{COLOR_SPACE}.png")
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
-dev = "cuda" if torch.cuda.is_available() else "cpu"
 model = PNTC()
-_fit(model, tensor)
-for size in [1024,2048,4096]:
+fft = iu.get_fft(tensor)
+
+_fit(model, fft)
+sizes = [2**i for i in range(10, 14)]
+for size in sizes:
     gen = _generate(model, size, size)
-    iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, True)
+    iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, generated=True)
