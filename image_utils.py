@@ -114,12 +114,11 @@ def full_copy(img_path, deep_color=False):
 CUT = config.CUT
 
 def get_fft(img):
-    f_coeff = torch.fft.fft2(img)
-    shift = torch.fft.fftshift(f_coeff)
-    mask = torch.zeros_like(shift)
-    mid = f_coeff.shape[0] // 2
-    mask[mid - CUT:mid + CUT, mid - CUT:mid + CUT] = 1
-    shift *= mask
-    magnitude = 20 * torch.log(torch.abs(torch.fft.ifftshift(shift)) + 1e-8)
-    reconstruction = torch.fft.ifft2(torch.fft.ifftshift(shift)).real
+    f_coeff = torch.fft.rfft2(img)
+    mask = torch.ones_like(f_coeff.real)
+    mask[:CUT, :CUT] = 0
+    mask[-CUT:, :CUT] = 0
+    f_coeff *= mask
+    magnitude = 20 * torch.log(torch.abs(f_coeff))
+    reconstruction = torch.fft.irfft2(f_coeff, s=img.shape)
     return reconstruction

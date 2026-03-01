@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 import image_utils as iu
 
-CUT = 128
+CUT = 256
 
 def get_standard_fft_results(img):
     f_coeff = torch.fft.fft2(img)
@@ -17,7 +17,7 @@ def get_fast_real_fft_results(img):
     f_coeff = torch.fft.rfft2(img)
     mask = torch.ones_like(f_coeff.real)
     mask[:CUT, :CUT] = 0
-    mask[-CUT:, -CUT:] = 0
+    mask[-CUT:, :CUT] = 0
     f_coeff *= mask
     magnitude = 20 * torch.log(torch.abs(f_coeff) + 1e-8)
     reconstruction = torch.fft.irfft2(f_coeff, s=img.shape)

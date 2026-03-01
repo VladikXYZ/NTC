@@ -15,7 +15,7 @@ def _create_mlp():
     model = torch.nn.Sequential(
         torch.nn.Linear(FEATURE_DIM, HIDDEN_DIM),torch.nn.ReLU(inplace=True),
         torch.nn.Linear(HIDDEN_DIM, HIDDEN_DIM), torch.nn.ReLU(inplace=True),
-        torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),torch.nn.Sigmoid())
+        torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),torch.nn.Tanh())
     return model
 
 def _fit(zmrd,img):
@@ -142,7 +142,8 @@ tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 model = PNTC()
 fft = iu.get_fft(tensor)
-
+# print((tensor-fft).min())
+print(fft)
 _fit(model, fft)
 sizes = [2**i for i in range(10, 14)]
 for size in sizes:
