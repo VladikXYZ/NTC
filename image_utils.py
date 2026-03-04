@@ -115,10 +115,12 @@ CUT = config.CUT
 
 def get_fft(img):
     f_coeff = torch.fft.rfft2(img)
-    mask = torch.ones_like(f_coeff.real)
+    mask = torch.ones_like(f_coeff)
     mask[:CUT, :CUT] = 0
     mask[-CUT:, :CUT] = 0
     f_coeff *= mask
     magnitude = 20 * torch.log(torch.abs(f_coeff))
     reconstruction = torch.fft.irfft2(f_coeff, s=img.shape)
-    return reconstruction
+    save_image("fft", np.asarray(img - reconstruction), "Y")
+    # return magnitude, img - reconstruction
+    return img - reconstruction

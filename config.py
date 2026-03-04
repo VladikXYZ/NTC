@@ -8,8 +8,8 @@ FEATURE_DIM = 16
 FEATURES_CHANNEL = 4
 POSITIONAL_ENCODING = 0
 BASE_RES = 512
-EPOCHS = 10
+EPOCHS = 25
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = max(4096, (2**18)*(DEVICE=="cuda"))
 LPIPS_NET = "alex"
-CUT = 128
+CUT = 512

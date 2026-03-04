@@ -141,11 +141,12 @@ img_path = Path(f"converted/r8_{COLOR_SPACE}.png")
 tensor = iu.tensor_float_load(img_path)
 h,w = tensor.shape[:2]
 model = PNTC()
+# print(tensor)
 fft = iu.get_fft(tensor)
 # print((tensor-fft).min())
-print(fft)
-_fit(model, fft)
-sizes = [2**i for i in range(10, 14)]
-for size in sizes:
-    gen = _generate(model, size, size)
-    iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, generated=True)
+# print(fft)
+# _fit(model, fft)
+# sizes = [2**i for i in range(10, 14)]
+# for size in sizes:
+#     gen = _generate(model, size, size)
+#     iu.save_image(img_path.stem[0]+str(size//1024), gen, COLOR_SPACE, generated=True)
